@@ -780,11 +780,12 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             for chn in SIMP['pipa']:
                 add_slab('pipa', 'pp', M(LineString([tuple(q) for q in chn]).buffer(0.15, cap_style=2, join_style=2)), 0.15, 0.15, y_from_surface=True, dy=-0.8)
         water = None
-        if O in FLOOD and not refined and all(bf[i][1]['hx1S'] is not None for i in range(3)) and all(mab[(sal, bag)].get(p) is not None for p in POS):
+        if O in FLOOD and all(hullT[t_]['S'] is not None for t_ in T):
             W = [MAB0] * 3
             tops = []
-            for k, (_, ea) in enumerate(bf):
-                tops.append([round(max(sv, W[k]), 3) if x >= ea['hx1S'] - 1e-6 else sv for x, sv in zip(ug, ST[k])])
+            for k_, t_ in enumerate(T):                       # MAB datar; air hanya di luar saluran selatan (di luar timbunan)
+                hx1 = hullT[t_]['S'].bounds[2]
+                tops.append([round(max(sv, MAB0), 3) if x >= hx1 - 1e-6 else sv for x, sv in zip(ug, ST[k_])])
             water = {'W': W, 'top': tops}
         infos = [s_['info'] for s_ in secs]
         if ovr:

@@ -165,7 +165,7 @@ export function buildGeometry(segs, sta0, floor, irig) {
     strip(e.x, e.S, e.P, XE, get('sawah'));
     if (e.V) strip(e.x, e.V, e.F, XE, get('pav'));
     strip(e.x, e.F, e.S, XE, get('fill'));
-    if (seg.water) strip(e.x, seg.water.top, e.S, X, get('water'));
+    if (seg.water) strip(e.x, seg.water.top, e.S, XE, get('water'));
     for (const z of seg.zel || []) prismZ(z.rings, z.z0, z.z1, sta0, get(z.m));
     for (const q of seg.sl || []) slab(q.rings, q.y0, q.gx, q.z0, q.hb, q.ht, sta0, get(q.m));
     for (const el of seg.els) {

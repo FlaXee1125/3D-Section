@@ -13,7 +13,8 @@ const MATS = {
   steel:   { c: 0x9ec3d6, n: 'Guardrail' },
   channel: { c: 0x5fc2f0, n: 'Saluran (U-ditch / trapesium)' },
   culvert: { c: 0xf0883e, n: 'Siphon / box culvert / talang' },
-  post:    { c: 0xe5484d, n: 'Patok RUMIJA' },
+  post:    { c: 0xe5484d, n: 'Patok RUMIJA (tiap 20 m)' },
+  water:   { c: 0x2f7fd6, n: 'Muka air banjir (O1)' },
 };
 const ORDER = Object.keys(MATS);
 const $ = id => document.getElementById(id);
@@ -59,7 +60,8 @@ function buildView(segs) {
     g.setAttribute('position', new THREE.BufferAttribute(geos[m], 3)); g.computeVertexNormals(); g.computeBoundingSphere();
     const col = new THREE.Color(MATS[m].c);
     const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.88, metalness: 0.03, side: THREE.DoubleSide });
-    const mesh = new THREE.Mesh(g, mat); mesh.renderOrder = 1000; mesh.frustumCulled = false; root.add(mesh);
+    if (m === 'water') { mat.transparent = true; mat.opacity = 0.5; mat.depthWrite = false; mat.roughness = 0.2; }
+    const mesh = new THREE.Mesh(g, mat); mesh.renderOrder = m === 'water' ? 1100 : 1000; mesh.frustumCulled = false; root.add(mesh);
     const rec = { mesh, mat, slots: [] };
     for (let p = 0; p < 3; p++) {
       const mk = (side, op) => new THREE.MeshBasicMaterial({
@@ -130,7 +132,7 @@ function sample(seg, s) {
     const A = seg.info[i][k], B = seg.info[i+1][k], N = seg.info[near][k];
     return { ...N, top: lerp(A.top, B.top), bottom: lerp(A.bottom, B.bottom), ground: lerp(A.ground, B.ground), offset: lerp(A.offset, B.offset), note: N.note };
   };
-  return { U: side('U'), S: side('S'), deck: lerp(seg.deck[i], seg.deck[i+1]), near: ['AWAL', 'TENGAH', 'AKHIR'][near], seg };
+  return { U: side('U'), S: side('S'), deck: lerp(seg.deck[i], seg.deck[i+1]), water: seg.water ? lerp(seg.water.W[i], seg.water.W[i+1]) : null, near: ['AWAL', 'TENGAH', 'AKHIR'][near], seg };
 }
 const f3 = v => v == null ? '–' : v.toFixed(3);
 function delta(a, b) {
@@ -149,7 +151,8 @@ function cardHTML(sm, ref) {
   <table><tr><th></th><th>UTARA</th><th>SELATAN</th></tr>
   ${row('Tipe', typ)}${row('Top (m)', k => num('top', k))}${row('Dasar (m)', k => num('bottom', k))}
   ${row('Tanah (m)', k => num('ground', k))}
-  <tr><th>As jalan</th><td colspan="2">${f3(sm.deck)} m${ref ? delta(ref.deck, sm.deck) : ''}</td></tr></table>
+  <tr><th>As jalan</th><td colspan="2">${f3(sm.deck)} m${ref ? delta(ref.deck, sm.deck) : ''}</td></tr>
+  ${sm.water != null ? `<tr><th>MAB banjir</th><td colspan="2" style="color:#6db3ff">${f3(sm.water)} m (selatan jalan)</td></tr>` : ''}</table>
   ${notes.length ? `<div class="muted note">${notes.join(' · ')}</div>` : ''}`;
 }
 function updateCards() {

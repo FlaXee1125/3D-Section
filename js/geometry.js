@@ -90,12 +90,13 @@ export function buildGeometry(segs, sta0, floor) {
     const e = seg.earth;
     strip(e.x, e.S, e.S.map(r => r.map(() => floor)), X, get('ground'));
     strip(e.x, e.F, e.S, X, get('fill'));
+    if (seg.water) strip(e.x, seg.water.top, e.S, X, get('water'));
     for (const el of seg.els) {
       const out = get(el.m);
-      if (el.m === 'post') {                              // patok RUMIJA: tiang tersendiri tiap ~20 m
-        const a = X[0], b = X[2], n = Math.max(1, Math.round((b - a) / 20));
-        for (let q = 0; q <= n; q++) {
-          const x = a + (b - a) * q / n, k = Math.abs(x - X[1]) < Math.abs(x - X[0]) && Math.abs(x - X[1]) < Math.abs(x - X[2]) ? 1 : (Math.abs(x - X[0]) < Math.abs(x - X[2]) ? 0 : 2);
+      if (el.m === 'post') {                              // patok RUMIJA: satu tiang tiap 20 m (kelipatan 20 m STA)
+        const sa = Math.min(seg.sta[0], seg.sta[2]), sb = Math.max(seg.sta[0], seg.sta[2]);
+        for (let st = Math.ceil(sa / 20) * 20; st <= sb; st += 20) {
+          const x = st - sta0, k = [0, 1, 2].reduce((b, q) => Math.abs(x - X[q]) < Math.abs(x - X[b]) ? q : b, 0);
           if (el.r[k]) prism(el.r[k], x - 0.15, x + 0.15, out);
         }
         continue;

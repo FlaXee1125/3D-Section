@@ -11,6 +11,7 @@ from shapely.geometry import Polygon, box, MultiPolygon, LineString
 from shapely.ops import unary_union
 from shapely import affinity
 
+WALL = 0.20  # tebal dinding siphon / talang (m)
 XL = 36.0   # jangkauan offset yang dimodelkan (m, kiri-kanan as jalan)
 SRC = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'data/model.json'
@@ -137,7 +138,7 @@ def build_frame(f, floor):
             rects = sorted([Polygon(p).buffer(0) for _, p in shapes], key=lambda p: -p.area)
             if len(rects) >= 2: conc = rects[0].difference(rects[1]); hull = rects[0]; mat = 'culvert'
             else:
-                r = rects[0]; hull = r.buffer(0.15, join_style=2); conc = hull.difference(r); mat = 'culvert'
+                r = rects[0]; hull = r.buffer(WALL, join_style=2); conc = hull.difference(r); mat = 'culvert'
         else:
             conc = clean(Polygon(shapes[0][1])); hull = conc.convex_hull; mat = 'channel'
         chan[s] = (conc, hull, mat)
@@ -203,7 +204,8 @@ def build_frame(f, floor):
         bp |= {round(hx0, 4), round(hx0 + 1e-3, 4), round(hx1 - 1e-3, 4), round(hx1, 4)}
         bp |= {round(p[0], 4) for p in h.exterior.coords}
     bp = sorted(v for v in bp if -XL <= v <= XL)
-    earth = dict(bp=bp, F=F, G=Gf)
+    hxS = [h.bounds[2] for s_, (c, h, m) in chan.items() if s_ == 'S']
+    earth = dict(bp=bp, F=F, G=Gf, hx1S=hxS[0] if hxS else None)
     els = []
     for k, mat in (('base', 'base'), ('lfa', 'lfa'), ('pav', 'pav')):
         els.append((k, mat, ROAD[k].translate(0, d) if hasattr(ROAD[k], 'translate') else affinity.translate(ROAD[k], 0, d)))
@@ -303,6 +305,10 @@ def align_rings(rings_list):
 
 # ---------- 5. susun per zona / skenario / segmen
 POS = ['AWAL', 'TENGAH', 'AKHIR']
+FLOOD = {'O1'}   # zona dengan banjir kawasan di sisi selatan; MAB = dasar saluran selatan Skenario 1
+mab = {}
+for f in frames:
+    if f['sk_t'] == 1: mab.setdefault((f['saluran'], f['bagian']), {})[f['pos']] = f['info']['S'].get('bottom')
 byO = collections.defaultdict(list)
 for f in frames: byO[f['O']].append(f)
 model = {'sumber': SRC.split('/')[-1], 'zona': {}}
@@ -354,10 +360,17 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             for n, i in enumerate(idx):
                 aligned[i] = [slots[ri][n] for ri in range(nh + 1)]
             elements.append({'k': k, 'm': mats[0], 'r': [None if o is None else [[round(v, 3) for pt in rg for v in pt] for rg in o] for o in aligned]})
+        water = None
+        if O in FLOOD and all(bf[i][1]['hx1S'] is not None for i in range(3)) and all(mab[(sal, bag)].get(p) is not None for p in POS):
+            W = [mab[(sal, bag)][p] for p in POS]
+            tops = []
+            for k, (_, ea) in enumerate(bf):
+                tops.append([round(max(sv, W[k]), 3) if x >= ea['hx1S'] - 1e-6 else sv for x, sv in zip(ug, earth_out['S'][k])])
+            water = {'W': W, 'top': tops}
         z['skenario'].setdefault(str(sk), []).append({
             'id': f'Saluran {sal} / Bagian {bag}', 'saluran': sal, 'bagian': bag,
             'sta': [s['sta'] for s in secs], 'deck': [s['deck'] for s in secs],
-            'info': [s['info'] for s in secs], 'earth': earth_out, 'els': elements})
+            'info': [s['info'] for s in secs], 'earth': earth_out, 'water': water, 'els': elements})
     allsta = [s for sk in z['skenario'].values() for sg in sk for s in sg['sta']]
     z['sta'] = [min(allsta), max(allsta)]
     model['zona'][O] = z

@@ -25,3 +25,9 @@ STA 0+683 s.d. 15+755; U-Ditch, trapesium, siphon, box culvert, talang.
 ## 5. Hasil
 Viewer 3D dua jendela (`index.html`, `js/`, `css/`), konverter DXF → JSON (`tools/dxf_to_model.py`),
 data (`data/model.json`). Lihat `README.md`.
+
+## 6. Revisi (dari user)
+- Tebal dinding siphon/talang = 20 cm.
+- O1: banjir kawasan di selatan jalan setinggi dasar saluran (MAB di luar timbunan) -> dimodelkan sebagai air transparan.
+- Guardrail menerus; patok RUMIJA tiap 20 m.
+- File DXF dimasukkan ke repo (`data/source/3d-Modeling.dxf`).

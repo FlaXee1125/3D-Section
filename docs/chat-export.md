@@ -31,3 +31,5 @@ data (`data/model.json`). Lihat `README.md`.
 - O1: banjir kawasan di selatan jalan setinggi dasar saluran (MAB di luar timbunan) -> dimodelkan sebagai air transparan.
 - Guardrail menerus; patok RUMIJA tiap 20 m.
 - File DXF dimasukkan ke repo (`data/source/3d-Modeling.dxf`).
+
+- MAB banjir O1 = satu elevasi datar (dasar saluran selatan di hilir/STA terendah = 46,184 m); sisi utara kering.

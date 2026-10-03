@@ -309,6 +309,9 @@ FLOOD = {'O1'}   # zona dengan banjir kawasan di sisi selatan; MAB = dasar salur
 mab = {}
 for f in frames:
     if f['sk_t'] == 1: mab.setdefault((f['saluran'], f['bagian']), {})[f['pos']] = f['info']['S'].get('bottom')
+first = min((f for f in frames if f['sk_t'] == 1 and f['O'] in FLOOD), key=lambda f: f['sta'])
+MAB0 = first['info']['S']['bottom']       # MAB tunggal = dasar saluran selatan di hilir (STA terendah), Skenario 1
+print('MAB banjir O1 =', MAB0, 'm di STA', first['sta'])
 byO = collections.defaultdict(list)
 for f in frames: byO[f['O']].append(f)
 model = {'sumber': SRC.split('/')[-1], 'zona': {}}
@@ -362,7 +365,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             elements.append({'k': k, 'm': mats[0], 'r': [None if o is None else [[round(v, 3) for pt in rg for v in pt] for rg in o] for o in aligned]})
         water = None
         if O in FLOOD and all(bf[i][1]['hx1S'] is not None for i in range(3)) and all(mab[(sal, bag)].get(p) is not None for p in POS):
-            W = [mab[(sal, bag)][p] for p in POS]
+            W = [MAB0] * 3
             tops = []
             for k, (_, ea) in enumerate(bf):
                 tops.append([round(max(sv, W[k]), 3) if x >= ea['hx1S'] - 1e-6 else sv for x, sv in zip(ug, earth_out['S'][k])])

@@ -39,7 +39,7 @@ python3 tools/dxf_to_model.py data/source/3d-Modeling.dxf data/model.json
 - Alinyemen dianggap **lurus** (gambar tidak memuat koordinat peta); antar potongan **interpolasi linear**.
 - Siphon & talang hanya digambar sebagai persegi dimensi bersih → diberi dinding beton **asumsi 0,20 m**.
 - Guardrail digambar menerus; patok RUMIJA digambar tiap 20 m (kelipatan 20 m STA).
-- **O1**: banjir kawasan di selatan jalan, muka air (MAB) = dasar saluran selatan **Skenario 1** (diinterpolasi per STA),
-  dipakai sama untuk kedua skenario; air berada di luar timbunan (tidak mengisi saluran).
+- **O1**: banjir kawasan di selatan jalan, muka air (MAB) = satu elevasi datar = dasar saluran selatan di hilir (STA terendah, Skenario 1),
+  sama untuk kedua skenario; sisi utara kering; air berada di luar timbunan (tidak mengisi saluran).
 - Air di dalam saluran tidak dimodelkan.
 - Jangkauan offset dimodelkan ±36 m dari as jalan.

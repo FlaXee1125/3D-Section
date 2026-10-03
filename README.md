@@ -38,7 +38,8 @@ python3 tools/dxf_to_model.py data/source/3d-Modeling.dxf data/model.json
 ## Asumsi / batasan
 - Alinyemen dianggap **lurus** (gambar tidak memuat koordinat peta); antar potongan **interpolasi linear**.
 - Siphon & talang hanya digambar sebagai persegi dimensi bersih → diberi dinding beton **asumsi 0,20 m**.
-- Guardrail digambar menerus; patok RUMIJA digambar tiap 20 m (kelipatan 20 m STA).
+- Guardrail W-beam: balok menerus, **tiang tersendiri tiap 2 m** (acuan: jarak tiang maks. 2 m untuk pagar pengaman W-beam; tinggi atas 65–80 cm dari perkerasan, tiang tertanam 1,0–1,15 m). Patok RUMIJA tiap 20 m (kelipatan STA).
+- Skala gambar DXF 1:1 (1 satuan = 1 m, horizontal dan vertikal sama); arah memanjang hanya diketahui dari label STA.
 - **O1**: banjir kawasan di selatan jalan, muka air (MAB) = satu elevasi datar = dasar saluran selatan di hilir (STA terendah, Skenario 1),
   sama untuk kedua skenario; sisi utara kering; air berada di luar timbunan (tidak mengisi saluran).
 - Air di dalam saluran tidak dimodelkan.

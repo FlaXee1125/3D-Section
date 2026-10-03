@@ -93,11 +93,12 @@ export function buildGeometry(segs, sta0, floor) {
     if (seg.water) strip(e.x, seg.water.top, e.S, X, get('water'));
     for (const el of seg.els) {
       const out = get(el.m);
-      if (el.m === 'post') {                              // patok RUMIJA: satu tiang tiap 20 m (kelipatan 20 m STA)
+      if (el.k.startsWith('post') || el.k.startsWith('gpost')) {   // tiang tersendiri: patok RUMIJA tiap 20 m, tiang guardrail tiap 2 m (kelipatan STA)
+        const gp = el.k.startsWith('gpost'), sp = gp ? 2 : 20, th = gp ? 0.1 : 0.15;
         const sa = Math.min(seg.sta[0], seg.sta[2]), sb = Math.max(seg.sta[0], seg.sta[2]);
-        for (let st = Math.ceil(sa / 20) * 20; st <= sb; st += 20) {
+        for (let st = Math.ceil(sa / sp) * sp; st <= sb; st += sp) {
           const x = st - sta0, k = [0, 1, 2].reduce((b, q) => Math.abs(x - X[q]) < Math.abs(x - X[b]) ? q : b, 0);
-          if (el.r[k]) prism(el.r[k], x - 0.15, x + 0.15, out);
+          if (el.r[k]) prism(el.r[k], x - th, x + th, out);
         }
         continue;
       }

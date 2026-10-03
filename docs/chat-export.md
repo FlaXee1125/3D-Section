@@ -33,3 +33,7 @@ data (`data/model.json`). Lihat `README.md`.
 - File DXF dimasukkan ke repo (`data/source/3d-Modeling.dxf`).
 
 - MAB banjir O1 = satu elevasi datar (dasar saluran selatan di hilir/STA terendah = 46,184 m); sisi utara kering.
+
+## 7. Guardrail & skala
+- Guardrail: balok W-beam menerus + tiang tiap 2 m (acuan jarak tiang maks. 2 m; belum terverifikasi ke teks pasal karena situs sumber diblokir).
+- Gambar DXF skalatis 1:1 (lebar U-ditch cocok label hingga 1 mm).

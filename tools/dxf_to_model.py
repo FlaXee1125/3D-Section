@@ -107,8 +107,11 @@ def sym(pts):
     return unary_union([a, b])
 ROAD = {k: sym(v) for k, v in R.items()}
 BARRIER = sym([(0,1.11),(.075,1.11),(.125,.27),(.4,.03),(.4,-.05),(0,-.05)])
-GUARD_R = Polygon([(11.575,-1.394),(11.753,-1.394),(11.753,.406),(11.397,.406),(11.397,.094),(11.575,.094)])
-GUARD_L = affinity.scale(GUARD_R, xfact=-1, origin=(0, 0))
+# guardrail W-beam: balok (rail) menerus + tiang tersendiri (lihat js/geometry.js: tiang tiap 2 m)
+RAIL_R = Polygon([(11.397,.094),(11.575,.094),(11.575,.406),(11.397,.406)])
+GPOST_R = unary_union([Polygon([(11.575,-1.394),(11.753,-1.394),(11.753,.406),(11.575,.406)]),
+                       Polygon([(11.568,-1.394),(12.025,-1.394),(12.018,-.498),(11.568,-.453)])])
+RAIL_L = affinity.scale(RAIL_R, xfact=-1, origin=(0, 0)); GPOST_L = affinity.scale(GPOST_R, xfact=-1, origin=(0, 0))
 # garis atas timbunan di bawah perkerasan (relatif as jalan)
 SUB_R = [(10.401, None), (10.54, -1.03), (8.27, -.916), (.4, -.68)]
 
@@ -210,8 +213,8 @@ def build_frame(f, floor):
     for k, mat in (('base', 'base'), ('lfa', 'lfa'), ('pav', 'pav')):
         els.append((k, mat, ROAD[k].translate(0, d) if hasattr(ROAD[k], 'translate') else affinity.translate(ROAD[k], 0, d)))
     els.append(('barrier', 'barrier', affinity.translate(BARRIER, 0, d)))
-    els.append(('guardU', 'steel', affinity.translate(GUARD_L, 0, d)))
-    els.append(('guardS', 'steel', affinity.translate(GUARD_R, 0, d)))
+    for k, g in (('railU', RAIL_L), ('railS', RAIL_R), ('gpostU', GPOST_L), ('gpostS', GPOST_R)):
+        els.append((k, 'steel', affinity.translate(g, 0, d)))
     for s, (c, h, m) in chan.items():
         for i, p in enumerate(sorted(polys(c), key=lambda p: p.centroid.x)): els.append((f'chan{s}{i}', m, p))
     for lay in f['poly'].get('POT_ALL_APJ', []):

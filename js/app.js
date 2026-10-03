@@ -10,7 +10,7 @@ const MATS = {
   base:    { c: 0x7b8797, n: 'Beton ramping' },
   lfa:     { c: 0xd0c296, n: 'LFA' },
   barrier: { c: 0xc3c9d0, n: 'Median barrier' },
-  steel:   { c: 0x9ec3d6, n: 'Guardrail' },
+  steel:   { c: 0x9ec3d6, n: 'Guardrail (balok menerus + tiang tiap 2 m)' },
   channel: { c: 0x5fc2f0, n: 'Saluran (U-ditch / trapesium)' },
   culvert: { c: 0xf0883e, n: 'Siphon / box culvert / talang' },
   post:    { c: 0xe5484d, n: 'Patok RUMIJA (tiap 20 m)' },

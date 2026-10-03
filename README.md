@@ -55,6 +55,12 @@ python3 tools/dxf_to_model.py data/source/3d-Modeling.dxf data/model.json
   bila ada, selain itu tengah rentang bangunan. Lokasi pasti belum terkonfirmasi (kemungkinan bergeser ±3 m); ubah `REF_IRIGASI` di `tools/dxf_to_model.py`.
 - Talang Skenario 1 yang tidak punya siphon di Skenario 2 (O6 STA 9+942,9–9+949,9; O9 14+714,76–14+718,76 dan 14+721–14+729) otomatis dimodelkan siphon di Skenario 2.
 
+## Penyeberang saluran irigasi (talang / siphon)
+- Di tiap lokasi irigasi, saluran drainase jalan diseragamkan agar konsepnya jelas: **Skenario 1 = talang** (flume terbuka, di atas saluran irigasi, berisi air),
+  **Skenario 2 = siphon** (turun – datar – naik, simetris di bawah saluran irigasi). Keduanya lurus dan sejajar jalan (offset tetap).
+- Dasar saluran irigasi = 0,5 m di bawah muka tanah (arahan); tombol **Tembus tanah** menyembunyikan tanah/timbunan agar siphon dan pipa terlihat.
+- Saluran drainase jalan (U-ditch, trapesium, talang) kini berisi air setinggi 60 % tinggi bersih; takik timbunan mengikuti saluran yang bergeser (belok/melipir).
+
 ## Asumsi / batasan
 - Alinyemen dianggap **lurus** (gambar tidak memuat koordinat peta); antar potongan **interpolasi linear**.
 - Siphon & talang hanya digambar sebagai persegi dimensi bersih → diberi dinding beton **asumsi 0,20 m**.

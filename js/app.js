@@ -266,6 +266,13 @@ $('cutMode').onchange = e => { S.mode = e.target.value;
   preset(S.mode === 'long' ? 'side' : S.mode === 'level' ? 'top' : 'iso'); };
 $('btnLink').onclick = e => { link = !link; e.target.classList.toggle('on', link); applyEnable();
   if (link) { camR.position.copy(camL.position); ctlR.target.copy(ctlL.target); } toast(link ? 'Kamera disinkronkan' : 'Kamera terpisah: geser tiap jendela sendiri'); };
+let xray = false;
+$('btnXray').onclick = e => {
+  xray = !xray; e.target.classList.toggle('on', xray);
+  const hide = ['ground', 'fill', 'sawah', 'pematang', 'pav'];
+  document.querySelectorAll('#legend label').forEach((l, i) => { const m = ORDER[i]; if (hide.includes(m)) { l.querySelector('input').checked = !xray; S.vis[m] = !xray; } });
+  applyPlanes();
+};
 const goFull = () => { try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => toast('Layar penuh ditolak browser. Buka link di tab sendiri lalu tekan F11.')); } catch (e) { toast('Layar penuh tidak didukung. Tekan F11.'); } };
 $('btnFull').onclick = goFull;
 document.addEventListener('fullscreenchange', () => { $('btnFull').textContent = document.fullscreenElement ? '⛶ Keluar layar penuh' : '⛶ Layar penuh'; });

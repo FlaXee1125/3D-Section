@@ -15,7 +15,8 @@ WALL = 0.20  # tebal dinding siphon / talang (m)
 ZC = 12.8    # |offset| tempat saluran irigasi melintang mulai terbuka (di luar badan jalan; di dalamnya lewat gorong-gorong)
 TS = 0.25    # tebal lapisan sawah (m)
 CH = 1.0     # tinggi bersih gorong-gorong irigasi (m)
-D0 = 1.2     # kedalaman saluran irigasi dari muka tanah (m)
+WFR = 0.6    # tinggi muka air di saluran drainase jalan = 60 % tinggi bersih
+D0 = 0.5     # dasar saluran irigasi = 0,5 m di bawah muka tanah (arahan)
 # titik acuan STA bangunan (kolom 'STA titik acuan' di Data_Drainase_Rev19.xlsx, sheet Bangunan): lokasi saluran irigasi bagi siphon
 REF_IRIGASI = {8339.85, 11625.23, 14064.93}
 # simpang (STA titik tengah) + tata letak tipikal dari data/simpang.json
@@ -143,7 +144,14 @@ def polys(g):
     return [p for p in getattr(g, 'geoms', []) if isinstance(p, Polygon) and p.area > 1e-5]
 def clean(g): return g.buffer(0) if not g.is_valid else g
 
-def build_frame(f, floor, override=False):
+def talang_geom(cx, ib, b=0.8, h=0.95):
+    """talang (flume terbuka): dinding+dasar beton WALL, bak bersih b x h; kembalikan (beton, hull, kavitas air)"""
+    W = WALL
+    conc = Polygon([(cx - b/2 - W, ib - W), (cx + b/2 + W, ib - W), (cx + b/2 + W, ib + h), (cx + b/2, ib + h), (cx + b/2, ib),
+                    (cx - b/2, ib), (cx - b/2, ib + h), (cx - b/2 - W, ib + h)])
+    return conc, box(cx - b/2 - W, ib - W, cx + b/2 + W, ib + h), box(cx - b/2, ib, cx + b/2, ib + WFR * h)
+
+def build_frame(f, floor, override=None):
     d = f['deck']; G = f['ground']; gx = np.array([p[0] for p in G]); gy = np.array([p[1] for p in G])
     Gf = lambda x: float(np.interp(x, gx, gy))
     L = f['L']
@@ -167,6 +175,27 @@ def build_frame(f, floor, override=False):
             conc = clean(Polygon(shapes[0][1])); hull = conc.convex_hull; mat = 'channel'
         chan[s] = (conc, hull, mat)
     centers = {s_: (h.bounds[0] + h.bounds[2]) / 2 for s_, (c, h, m) in chan.items()}
+    cavs = {}
+    if override == 'siphon': chan = {}                  # siphon tertanam: dibuat sebagai elemen khusus (tanpa takik)
+    elif isinstance(override, dict):                    # talang lurus sejajar jalan
+        chan = {}
+        for s_, (cx_, ib_) in override.items():
+            conc_, hull_, cav_ = talang_geom(cx_, ib_); chan[s_] = (conc_, hull_, 'culvert'); cavs[s_] = cav_; centers[s_] = cx_
+    for s_, (c, h, m) in ([] if isinstance(override, dict) else chan.items()):
+        inf_ = f['info'][s_]; typ_ = inf_.get('type', '')
+        if typ_.startswith(('U-Ditch', 'Trapesium')) or typ_.startswith('Talang'):
+            if typ_.startswith('Talang'):
+                rr = sorted([Polygon(p).buffer(0) for lay_ in ('POT_ALL_BUILDING',) for pts_ in f['poly'].get(lay_, []) for p in [L(pts_)] if np.mean([q[0] for q in p]) * (-1 if s_ == 'U' else 1) > 0], key=lambda p: -p.area)
+                cav = rr[0] if rr else None
+            else:
+                cav = h.difference(c)
+                gs = polys(cav); cav = max(gs, key=lambda p: p.area) if gs else None
+            if cav is not None and not cav.is_empty and inf_.get('top') is not None and inf_.get('bottom') is not None:
+                yw = inf_['bottom'] + WFR * (inf_['top'] - inf_['bottom'])
+                minx, miny, maxx, maxy = cav.bounds
+                w_ = cav.intersection(box(minx - 1, miny - 1, maxx + 1, yw))
+                gs = polys(w_)
+                if gs: cavs[s_] = max(gs, key=lambda p: p.area)
     if override: chan = {}          # saluran diganti struktur khusus (mis. siphon berliku)
     # --- rantai permukaan rencana per sisi (dari tengah ke luar)
     chains = {}
@@ -232,7 +261,8 @@ def build_frame(f, floor, override=False):
     bp |= {round(v, 4) for v in (-ZC, ZC, -ZC + 1e-3, ZC - 1e-3, toeL, toeR)}
     bp = sorted(v for v in bp if -XL <= v <= XL)
     hxS = [h.bounds[2] for s_, (c, h, m) in chan.items() if s_ == 'S']
-    earth = dict(bp=bp, F=F, G=Gf, hx1S=hxS[0] if hxS else None, toeL=toeL, toeR=toeR, centers=centers)
+    F0 = lambda x: float(np.interp(x, xs, ys))
+    earth = dict(bp=bp, F=F, F0=F0, G=Gf, hx1S=hxS[0] if hxS else None, toeL=toeL, toeR=toeR, centers=centers, hulls={s_: h for s_, (c, h, m) in chan.items()})
     els = []
     for k, mat in (('base', 'base'), ('lfa', 'lfa'), ('pav', 'pav')):
         els.append((k, mat, ROAD[k].translate(0, d) if hasattr(ROAD[k], 'translate') else affinity.translate(ROAD[k], 0, d)))
@@ -241,6 +271,7 @@ def build_frame(f, floor, override=False):
         els.append((k, 'steel', affinity.translate(g, 0, d)))
     for s, (c, h, m) in chan.items():
         for i, p in enumerate(sorted(polys(c), key=lambda p: p.centroid.x)): els.append((f'chan{s}{i}', m, p))
+    for s_, cv in cavs.items(): els.append((f'cwater{s_}', 'water', cv))
     for lay in f['poly'].get('POT_ALL_APJ', []):
         pl = L(lay)
         if len(pl) >= 8:
@@ -377,9 +408,6 @@ def find_sites(O, segs):
         gv = [i_[s_]['ground'] for sk in (1, 2) for i_ in [info_at(sk, sc)] if i_ for s_ in 'US' if i_[s_].get('ground') is not None]
         gavg = float(np.mean(gv))
         zb = gavg - D0
-        i2 = info_at(2, sc)
-        if i2 and i2['U'].get('type', '').startswith('Siphon'):
-            zb = max(zb, max(i2[s_]['top'] for s_ in 'US') + WALL + 0.3)
         d = max(0.5, gavg - zb); zb = gavg - d
         Wt = float(np.clip(0.7 * min(run, 20.0), 2.5, 8.0)); bw = max(0.8, Wt - 2 * d)
         zc = ZC
@@ -425,18 +453,35 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
     zsta = [f['sta'] for f in fr]; zlo, zhi = min(zsta), max(zsta)
     simps = [dict(name=n, sta=v) for n, v in SIMPANG if zlo <= v <= zhi and any(
         min(f_['sta'] for f_ in ps.values()) <= v <= max(f_['sta'] for f_ in ps.values()) for (k_, a_, b_), ps in segs.items() if k_ == 1)]
-    # revisi: S2 bertipe saluran biasa pada lokasi talang S1 -> dimodelkan siphon
+    # struktur penyeberang saluran irigasi diseragamkan (lurus, sejajar jalan): S1 = talang di atas, S2 = siphon di bawah saluran
     ovr_map = {}
+    def seg_types(ps): return {f['info'][s_].get('type', '') for f in ps.values() for s_ in 'US'}
     for st in sites:
         for (sk, sal, bag), ps in segs.items():
-            if sk != 2: continue
             sts = [f['sta'] for f in ps.values()]
             if not (st['a'] - 0.5 <= min(sts) and max(sts) <= st['b'] + 0.5): continue
-            ty = {f['info'][s_].get('type', '') for f in ps.values() for s_ in 'US'}
-            s1 = segs.get((1, sal, bag))
-            t1 = {f['info'][s_].get('type', '') for f in s1.values() for s_ in 'US'} if s1 else set()
-            if not any(t.startswith(('Siphon', 'Talang')) for t in ty) and any(t.startswith('Talang') for t in t1):
-                ovr_map[(sk, sal, bag)] = st
+            ty = seg_types(ps)
+            if any(t.startswith('Box') for t in ty): continue
+            if sk == 2: ovr_map[(sk, sal, bag)] = ('siphon', st)
+            elif not any(t.startswith('Talang') for t in ty): ovr_map[(sk, sal, bag)] = ('talang', st)
+    def neigh_bottom(sk, sta_t, s_):
+        best = None
+        for f in fr:
+            if f['sk_t'] != sk: continue
+            ty = f['info'][s_].get('type', '')
+            if ty.startswith(('Siphon', 'Talang', 'Box')) or f['info'][s_].get('bottom') is None: continue
+            dd = abs(f['sta'] - sta_t)
+            if best is None or dd < best[0]: best = (dd, f['info'][s_]['bottom'])
+        return best[1] if best else None
+    for st in sites:
+        cands = [f for f in fr if st['a'] - 1 <= f['sta'] <= st['b'] + 1] or fr
+        f0 = min(cands, key=lambda f: abs(f['sta'] - st['sta']))
+        ea0 = build_frame(f0, floor)[1]
+        st['cx'] = {s_: round(ea0['centers'].get(s_, (-17.0 if s_ == 'U' else 17.0)), 3) for s_ in 'US'}
+        st['bt'] = {sk_: {s_: [neigh_bottom(sk_, st['a'], s_), neigh_bottom(sk_, st['b'], s_)] for s_ in 'US'} for sk_ in (1, 2)}
+        run = st['b'] - st['a']
+        st['fh'] = max(0.5, min(st['bw'] / 2 + 0.5, run / 2 - 1.0))
+        st['dip'] = round(st['zb'] - 0.3 - WALL - 0.95, 3)
     irig = {'sites': sites, 'simpang': [x['name'] + f" @ {x['sta']}" for x in simps], 'zel': []}
     for st in sites:
         zb, bw, d, sc, zc_ = st['zb'], st['bw'], st['d'], st['sta'], st['zc']
@@ -451,31 +496,30 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
     z['irigasi'] = irig
     for (sk, sal, bag), ps in sorted(segs.items(), key=lambda kv: (kv[0][0], kv[1]['AWAL']['sta'])):
         secs = [ps[p] for p in POS]
-        ovr = ovr_map.get((sk, sal, bag))
-        bf = [build_frame(f, floor, override=bool(ovr)) for f in secs]
+        ovr_ = ovr_map.get((sk, sal, bag)); ovr = ovr_[1] if ovr_ else None; okind = ovr_[0] if ovr_ else None
+        def ov_arg(f):
+            if okind == 'siphon': return 'siphon'
+            if okind == 'talang':
+                st_ = ovr; spec = {}
+                for s_ in 'US':
+                    ba, bb = st_['bt'][1][s_]
+                    if ba is None or bb is None: ba = bb = f['info'][s_].get('bottom') or 53.0
+                    ib_ = float(np.interp(f['sta'], [st_['a'], st_['b']], [ba, bb]))
+                    spec[s_] = (st_['cx'][s_], ib_)
+                return spec
+            return None
+        bf = [build_frame(f, floor, override=ov_arg(f)) for f in secs]
         built = [{k: (mat, poly) for k, mat, poly in els} for els, _ in bf]
         stas = [s_['sta'] for s_ in secs]; sa_, sb_ = stas[0], stas[2]
         sp_here = [sp for sp in simps if sp['sta'] - (SP_W2 + SP_R + 8) < sb_ and sp['sta'] + (SP_W2 + SP_R + 8) > sa_]
-        # grid x bersama untuk tiga potongan
-        grid = set()
-        for _, ea in bf:
-            xsb = ea['bp']; Fv = [ea['F'](x) for x in xsb]; Gv = [ea['G'](x) for x in xsb]
-            grid |= set(xsb)
-            for i in range(len(xsb) - 1):
-                d0, d1 = Gv[i] - Fv[i], Gv[i+1] - Fv[i+1]
-                if d0 * d1 < 0: grid.add(round(xsb[i] + (xsb[i+1]-xsb[i]) * d0 / (d0 - d1), 4))
-        if sp_here:
-            for k_ in range(0, 50):
-                for sg in (1, -1): grid.add(round(sg * (SP_E0 + 0.5 * k_), 4))
-            grid = {v for v in grid if -XL <= v <= XL}
-        grid = sorted(grid); ug = []
-        for v in grid:
-            if not ug or v - ug[-1] >= 1e-4: ug.append(v)
-        xa = np.array(ug)
-        Fk, Sk, toes = [], [], []
-        for _, ea in bf:
-            Fv = np.array([ea['F'](x) for x in ug]); Gv = np.array([ea['G'](x) for x in ug])
-            Fk.append(Fv); Sk.append(np.minimum(Gv, Fv)); toes.append((ea['toeL'], ea['toeR']))
+        # saluran yang bergeser (belok/melipir) -> stasiun tambahan tiap 40 m agar takik timbunan mengikuti saluran
+        def hb_of(ea, s_):
+            h = ea['hulls'].get(s_); return None if h is None else h.bounds
+        moving = False
+        for s_ in 'US':
+            bb = [hb_of(ea, s_) for _, ea in bf]
+            if all(b_ is not None for b_ in bb):
+                if max(abs(bb[i][j] - bb[0][j]) for i in range(1, 3) for j in (0, 1, 2)) > 0.03: moving = True
         T = list(stas); trench = []
         for st in sites:
             ext = st['bw'] / 2 + max(secs[1]['deck'], st['ground']) - st['zb'] + 1.0
@@ -486,12 +530,60 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
         for sp in sp_here:
             for t in np.arange(sp['sta'] - (SP_W2 + SP_R + 6), sp['sta'] + (SP_W2 + SP_R + 6) + 1e-6, 0.5):
                 if sa_ + 0.01 < t < sb_ - 0.01: T.append(round(float(t), 3))
+        if moving:
+            for t in np.arange(sa_ + 40.0, sb_ - 20.0, 40.0): T.append(round(float(t), 3))
         T = sorted(set(T))
         refined = len(T) > 3
+        def hull_at(t, s_):
+            """hull saluran pada STA t: bergeser linear antar potongan (geser hull potongan terdekat)"""
+            hs_ = [ea['hulls'].get(s_) for _, ea in bf]
+            if all(h_ is None for h_ in hs_): return None
+            if any(h_ is None for h_ in hs_):
+                j = int(np.argmin([abs(t - v) for v in stas])); return hs_[j]
+            bb = [h_.bounds for h_ in hs_]
+            j = int(np.argmin([abs(t - v) for v in stas]))
+            dx = float(np.interp(t, stas, [b_[0] for b_ in bb])) - bb[j][0]; dy = float(np.interp(t, stas, [b_[1] for b_ in bb])) - bb[j][1]
+            return affinity.translate(hs_[j], dx, dy)
+        def hb(h, x):
+            ln = LineString([(x, -1e3), (x, 1e3)]).intersection(h)
+            return None if ln.is_empty else ln.bounds[1]
+        hullT = {t: {s_: hull_at(t, s_) for s_ in 'US'} for t in T}
+        # grid x bersama
+        grid = set()
+        for _, ea in bf:
+            xsb = ea['bp']; Fv = [ea['F'](x) for x in xsb]; Gv = [ea['G'](x) for x in xsb]
+            grid |= set(xsb)
+            for i in range(len(xsb) - 1):
+                d0, d1 = Gv[i] - Fv[i], Gv[i+1] - Fv[i+1]
+                if d0 * d1 < 0: grid.add(round(xsb[i] + (xsb[i+1]-xsb[i]) * d0 / (d0 - d1), 4))
+        if moving:
+            for t in T:
+                for s_, h in hullT[t].items():
+                    if h is None: continue
+                    hx0, hy0, hx1, hy1 = h.bounds
+                    grid |= {round(hx0, 4), round(hx0 + 1e-3, 4), round(hx1 - 1e-3, 4), round(hx1, 4)} | {round(p[0], 4) for p in h.exterior.coords}
+        if sp_here:
+            for k_ in range(0, 50):
+                for sg in (1, -1): grid.add(round(sg * (SP_E0 + 0.5 * k_), 4))
+        grid = {v for v in grid if -XL <= v <= XL}
+        grid = sorted(grid); ug = []
+        for v in grid:
+            if not ug or v - ug[-1] >= 1e-4: ug.append(v)
+        xa = np.array(ug)
+        F0k, Gk, toes = [], [], []
+        for _, ea in bf:
+            F0k.append(np.array([ea['F0'](x) for x in ug])); Gk.append(np.array([ea['G'](x) for x in ug])); toes.append((ea['toeL'], ea['toeR']))
         decks = [s_['deck'] for s_ in secs]
         FT, ST, PT, VT = [], [], [], []
         for t in T:
-            Fv = np.array(lerp_cols(stas, Fk, t)); Sv = np.array(lerp_cols(stas, Sk, t))
+            Fv = np.array(lerp_cols(stas, F0k, t)); Gv_t = np.array(lerp_cols(stas, Gk, t))
+            for s_, h in hullT[t].items():
+                if h is None: continue
+                hx0, hy0, hx1, hy1 = h.bounds
+                for ci in np.where((xa > hx0 + 1e-6) & (xa < hx1 - 1e-6))[0]:
+                    lo = hb(h, float(xa[ci]))
+                    if lo is not None and lo < Fv[ci]: Fv[ci] = lo
+            Sv = np.minimum(Gv_t, Fv)
             tl = float(np.interp(t, stas, [x[0] for x in toes])); tr_ = float(np.interp(t, stas, [x[1] for x in toes]))
             Vv = Fv.copy()
             dk = float(np.interp(t, stas, decks))
@@ -515,7 +607,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             Sv = np.minimum(Sv, Fv)
             outside_t = (xa <= tl + 1e-6) | (xa >= tr_ - 1e-6)
             Pv = Sv - TS * outside_t
-            FT.append(np.round(Fv, 3).tolist()); ST.append(np.round(Sv, 3).tolist()); PT.append(np.round(Pv, 3).tolist()); VT.append(np.round(Vv, 3).tolist())
+            FT.append(np.round(Fv, 2).tolist()); ST.append(np.round(Sv, 2).tolist()); PT.append(np.round(Pv, 2).tolist()); VT.append(np.round(Vv, 2).tolist())
         earth_out = {'x': ug, 'F': FT, 'S': ST, 'P': PT}
         if sp_here: earth_out['V'] = VT
         if refined: earth_out['sta'] = T
@@ -570,23 +662,22 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             for n, i in enumerate(idx):
                 aligned[i] = [slots[ri][n] for ri in range(nh + 1)]
             elements.append({'k': k, 'm': mats[0], 'r': [None if o is None else [[round(v, 3) for pt in rg for v in pt] for rg in o] for o in aligned]})
-        # --- siphon berliku di bawah saluran irigasi (revisi)
-        if ovr:
-            st = ovr
-            sc, zb = st['sta'], st['zb']
-            fh = min(1.0, (st['b'] - st['a']) / 6)
-            xs = [sa_, sc - fh, sc + fh, sb_]
-            dip = zb - 0.3 - WALL - 0.95
+        # --- siphon lurus di bawah saluran irigasi (profil turun - datar - naik, simetris terhadap saluran)
+        if okind == 'siphon':
+            st = ovr; sc = st['sta']; fh = st['fh']
+            prof_x = [st['a'], sc - fh, sc + fh, st['b']]
+            xs = sorted({sa_, sb_} | {p for p in prof_x if sa_ < p < sb_})
             for s_ in 'US':
-                cx = bf[1][1]['centers'].get(s_, -17.4 if s_ == 'U' else 17.4)
-                bA = secs[0]['info'][s_].get('bottom'); bB = secs[2]['info'][s_].get('bottom')
-                ib = [bA, dip, dip, bB]; bw_ = 0.8; h_ = 0.95
-                outs, ins = [], []
+                cx = st['cx'][s_]; ba, bb = st['bt'][2][s_]
+                if ba is None or bb is None: ba = bb = secs[0]['info'][s_].get('bottom') or 53.0
+                prof_y = [ba, st['dip'], st['dip'], bb]
+                ib = [float(np.interp(x_, prof_x, prof_y)) for x_ in xs]
+                bw_ = 0.8; h_ = 0.95; outs, ins = [], []
                 for e0 in ib:
                     outs.append([flat(rect(cx - bw_/2 - WALL, e0 - WALL, cx + bw_/2 + WALL, e0 + h_ + WALL)), flat(rect(cx - bw_/2, e0, cx + bw_/2, e0 + h_, cw=True))])
                     ins.append([flat(rect(cx - bw_/2, e0, cx + bw_/2, e0 + h_))])
-                elements.append({'k': f'siphon{s_}', 'm': 'culvert', 'xs': xs, 'r': outs})
-                elements.append({'k': f'siphonbore{s_}', 'm': 'bore', 'xs': xs, 'r': ins})
+                elements.append({'k': f'siphon{s_}', 'm': 'culvert', 'xs': [round(v, 3) for v in xs], 'r': outs})
+                elements.append({'k': f'siphonbore{s_}', 'm': 'bore', 'xs': [round(v, 3) for v in xs], 'r': ins})
         # --- pematang sawah (di luar kaki timbunan)
         zel = []
         toeabs = {'U': max(abs(t[0]) for t in toes), 'S': max(abs(t[1]) for t in toes)}
@@ -667,7 +758,9 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
         infos = [s_['info'] for s_ in secs]
         if ovr:
             for inf in infos:
-                for s_ in 'US': inf[s_]['type'] = 'Siphon (revisi)'; inf[s_]['note'] = ['dimodelkan siphon di bawah saluran irigasi']
+                for s_ in 'US':
+                    inf[s_]['type'] = 'Siphon (standar)' if okind == 'siphon' else 'Talang (standar)'
+                    inf[s_]['note'] = ['siphon di bawah saluran irigasi (lurus, sejajar jalan)' if okind == 'siphon' else 'talang di atas saluran irigasi (lurus, sejajar jalan)']
         ov_st = [st_ for st_ in sites if st_['a'] - 0.5 <= (sa_ + sb_) / 2 <= st_['b'] + 0.5]
         z['skenario'].setdefault(str(sk), []).append({
             'id': f'Saluran {sal} / Bagian {bag}', 'saluran': sal, 'bagian': bag,
@@ -675,7 +768,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             'simpang': [sp['name'] for sp in sp_here] or None,
             'gaps': {'gpost': gaps_rail} if sp_here else None,
             'info': infos, 'earth': earth_out, 'water': water, 'zel': zel, 'yel': yel, 'els': elements,
-            **({'revisi': 'Model siphon (revisi)'} if ovr else {})})
+            **({'revisi': okind} if ovr else {})})
     allsta = [s for sk in z['skenario'].values() for sg in sk for s in sg['sta']]
     z['sta'] = [min(allsta), max(allsta)]
     model['zona'][O] = z

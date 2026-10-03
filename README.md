@@ -44,6 +44,17 @@ python3 tools/dxf_to_model.py data/source/3d-Modeling.dxf data/model.json
   yang turun di bawah dasar saluran irigasi (kemiringan kaki ±37°) lalu naik lagi; rongga digambar gelap.
 - **Sawah** (hijau) di kanan-kiri jalan di luar kaki timbunan, dengan **pematang** sejajar jalan (tiap 9 m offset) dan pematang melintang tiap 25 m STA.
 
+## Simpang dan lokasi irigasi
+- **Simpang** (STA tengah): Simpang 1 3+648,12 · Simpang 2 8+328,29 · Simpang 3 12+538,61 · Simpang 4 15+349. Hanya yang jatuh di STA yang punya gambar potongan
+  yang dimodelkan (Simpang 2 di O5 dan Simpang 4 di O9; Simpang 1 dan 3 berada di celah STA tanpa gambar). Di atas box culvert / siphon jalan simpang
+  dibuat sebagai timbunan + perkerasan dengan tikungan sudut (R 20 m), median dan guardrail jalan utama diputus di mulut simpang.
+- Tata letak drainase (catch basin 20, bak kontrol 6, manhole 6, catch drain/pipa Ø300) dibaca dari `data/source/TIPIKAL_DRAINASE_SIMPANG_1.pdf`
+  (`tools/pdf_to_simpang.py` → `data/simpang.json`), skala gambar 8,27 pt/m; jarak ke tepi jalan utama disesuaikan dengan lebar jalan utama model.
+  Pipa Ø300 digambar sebagai balok persegi 0,3 m di bawah tanah; matikan Tanah/Timbunan/Perkerasan di legenda untuk melihatnya.
+- **Saluran irigasi**: di setiap siphon/talang. Titik pusat = *STA titik acuan* siphon pada `Data_Drainase_Rev19.xlsx` (sheet Bangunan: 8+339,85 · 11+625,23 · 14+064,93)
+  bila ada, selain itu tengah rentang bangunan. Lokasi pasti belum terkonfirmasi (kemungkinan bergeser ±3 m); ubah `REF_IRIGASI` di `tools/dxf_to_model.py`.
+- Talang Skenario 1 yang tidak punya siphon di Skenario 2 (O6 STA 9+942,9–9+949,9; O9 14+714,76–14+718,76 dan 14+721–14+729) otomatis dimodelkan siphon di Skenario 2.
+
 ## Asumsi / batasan
 - Alinyemen dianggap **lurus** (gambar tidak memuat koordinat peta); antar potongan **interpolasi linear**.
 - Siphon & talang hanya digambar sebagai persegi dimensi bersih → diberi dinding beton **asumsi 0,20 m**.

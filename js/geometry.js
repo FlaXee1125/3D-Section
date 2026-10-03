@@ -104,6 +104,25 @@ export function prismZ(rings, z0, z1, sta0, out) {
   }
 }
 
+// Prisma tegak: cincin dalam bidang (STA, offset) diekstrusi dari elevasi y0 ke y1 (catch basin, bak kontrol, manhole, pipa)
+export function prismY(ring, y0, y1, sta0, out) {
+  const n = ring.length / 2, P = (k, y) => [ring[2*k] - sta0, y, ring[2*k+1]];
+  let a2 = 0; for (let k = 0; k < n; k++) { const k2 = (k + 1) % n; a2 += ring[2*k] * ring[2*k2+1] - ring[2*k2] * ring[2*k+1]; }
+  const sgn = a2 >= 0 ? 1 : -1;                       // cincin (X,Z) CCW -> normal samping keluar (dz, 0, -dx)
+  for (let k = 0; k < n; k++) {
+    const k2 = (k + 1) % n, dx = ring[2*k2] - ring[2*k], dz = ring[2*k2+1] - ring[2*k+1];
+    if (Math.hypot(dx, dz) < 1e-9) continue;
+    const nrm = [sgn * dz, 0, -sgn * dx];
+    tri(out, P(k, y0), P(k2, y0), P(k2, y1), nrm); tri(out, P(k, y0), P(k2, y1), P(k, y1), nrm);
+  }
+  const contour = []; for (let k = 0; k < n; k++) contour.push(new Vector2(ring[2*k] - sta0, ring[2*k+1]));
+  let faces; try { faces = ShapeUtils.triangulateShape(contour, []); } catch (e) { return; }
+  for (const [a, b, c] of faces) for (const [y, dir] of [[y0, -1], [y1, 1]]) {
+    const Q = i => [contour[i].x, y, contour[i].y];
+    tri(out, Q(a), Q(b), Q(c), [0, dir, 0]);
+  }
+}
+
 // segs: daftar segmen satu skenario; kembalikan {mat: Float32Array posisi}
 export function buildGeometry(segs, sta0, floor, irig) {
   const buf = {};
@@ -113,9 +132,11 @@ export function buildGeometry(segs, sta0, floor, irig) {
     const e = seg.earth, XE = (e.sta || seg.sta).map(v => v - sta0);
     strip(e.x, e.P, e.S.map(r => r.map(() => floor)), XE, get('ground'));
     strip(e.x, e.S, e.P, XE, get('sawah'));
+    if (e.V) strip(e.x, e.V, e.F, XE, get('pav'));
     strip(e.x, e.F, e.S, XE, get('fill'));
     if (seg.water) strip(e.x, seg.water.top, e.S, X, get('water'));
     for (const z of seg.zel || []) prismZ(z.rings, z.z0, z.z1, sta0, get(z.m));
+    for (const y of seg.yel || []) prismY(y.ring, y.y0, y.y1, sta0, get(y.m));
     for (const el of seg.els) {
       const out = get(el.m);
       const XS = el.xs ? el.xs.map(v => v - sta0) : X, N = el.r.length;
@@ -123,6 +144,7 @@ export function buildGeometry(segs, sta0, floor, irig) {
         const gp = el.k.startsWith('gpost'), sp = gp ? 2 : 20, th = gp ? 0.1 : 0.15;
         const sa = Math.min(seg.sta[0], seg.sta[2]), sb = Math.max(seg.sta[0], seg.sta[2]);
         for (let st = Math.ceil(sa / sp) * sp; st <= sb; st += sp) {
+          if (gp && (seg.gaps && seg.gaps.gpost || []).some(([a, b]) => st > a && st < b)) continue;
           const x = st - sta0, k = [0, 1, 2].reduce((b, q) => Math.abs(x - X[q]) < Math.abs(x - X[b]) ? q : b, 0);
           if (el.r[k]) prism(el.r[k], x - th, x + th, out);
         }

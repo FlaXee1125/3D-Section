@@ -40,3 +40,7 @@ data (`data/model.json`). Lihat `README.md`.
 
 ## 8. Siphon revisi, irigasi, sawah
 - Saluran 17 / Bagian 2 Skenario 2 dimodelkan siphon; ditambah saluran irigasi melintang di lokasi siphon/talang; sawah di kanan-kiri jalan.
+
+## 9. Simpang, irigasi (xlsx), siphon O9
+- Simpang 2 (8+328,29) dan Simpang 4 (15+349) dimodelkan dari PDF tipikal; Simpang 1 dan 3 di luar STA gambar.
+- Lokasi irigasi mengikut STA titik acuan siphon (xlsx), kemungkinan bergeser sampai 3 m.

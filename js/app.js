@@ -18,6 +18,12 @@ const MATS = {
   sawah:   { c: 0x74b04c, n: 'Sawah' },
   pematang:{ c: 0xc9ab70, n: 'Pematang sawah' },
   bore:    { c: 0x0b0f14, n: 'Rongga siphon / gorong-gorong' },
+  marka:   { c: 0xf2f2ee, n: 'Marka zebra cross' },
+  cdrain:  { c: 0x2b3038, n: 'Catch drain (selokan pulau simpang)' },
+  cb:      { c: 0xd9372f, n: 'Catch basin 60×60 cm' },
+  bk:      { c: 0xb98bd9, n: 'Bak kontrol 110×110 cm' },
+  mh:      { c: 0x2f78e6, n: 'Manhole' },
+  pipa:    { c: 0xf2cf2e, n: 'Pipa drainase Ø300 (tanah)' },
 };
 const ORDER = Object.keys(MATS);
 const $ = id => document.getElementById(id);
@@ -155,6 +161,7 @@ function cardHTML(sm, ref) {
   ${row('Tipe', typ)}${row('Top (m)', k => num('top', k))}${row('Dasar (m)', k => num('bottom', k))}
   ${row('Tanah (m)', k => num('ground', k))}
   <tr><th>As jalan</th><td colspan="2">${f3(sm.deck)} m${ref ? delta(ref.deck, sm.deck) : ''}</td></tr>
+  ${sm.seg.simpang ? `<tr><th>Simpang</th><td colspan="2" style="color:#f2cf2e">${sm.seg.simpang.join(', ')} (tipikal dari PDF)</td></tr>` : ''}
   ${sm.seg.irig ? `<tr><th>Irigasi</th><td colspan="2" style="color:#6db3ff">saluran melintang jalan: dasar ${f3(sm.seg.irig.zb)} m, lebar dasar ${sm.seg.irig.bw.toFixed(1)} m (asumsi)</td></tr>` : ''}
   ${sm.water != null ? `<tr><th>MAB banjir</th><td colspan="2" style="color:#6db3ff">${f3(sm.water)} m (selatan jalan)</td></tr>` : ''}</table>
   ${notes.length ? `<div class="muted note">${notes.join(' · ')}</div>` : ''}`;

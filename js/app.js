@@ -255,12 +255,16 @@ $('cutMode').onchange = e => { S.mode = e.target.value;
   preset(S.mode === 'long' ? 'side' : S.mode === 'level' ? 'top' : 'iso'); };
 $('btnLink').onclick = e => { link = !link; e.target.classList.toggle('on', link); applyEnable();
   if (link) { camR.position.copy(camL.position); ctlR.target.copy(ctlL.target); } toast(link ? 'Kamera disinkronkan' : 'Kamera terpisah: geser tiap jendela sendiri'); };
+const goFull = () => { try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => toast('Layar penuh ditolak browser. Buka link di tab sendiri lalu tekan F11.')); } catch (e) { toast('Layar penuh tidak didukung. Tekan F11.'); } };
+$('btnFull').onclick = goFull;
+document.addEventListener('fullscreenchange', () => { $('btnFull').textContent = document.fullscreenElement ? '⛶ Keluar layar penuh' : '⛶ Layar penuh'; });
 document.querySelectorAll('.views button').forEach(b => b.onclick = () => preset(b.dataset.v));
 $('prev').onclick = () => step(-1); $('next').onclick = () => step(1);
 $('play').onclick = () => { S.playing = !S.playing; $('play').textContent = S.playing ? '❚❚' : '▶'; };
 addEventListener('keydown', e => {
   if (/INPUT|SELECT/.test(document.activeElement.tagName) && document.activeElement.type !== 'range') return;
   if (e.key === 'ArrowRight') setSTA(S.s + (e.shiftKey ? 10 : 1)); else if (e.key === 'ArrowLeft') setSTA(S.s - (e.shiftKey ? 10 : 1));
+  else if (e.key === 'f' || e.key === 'F') goFull();
   else if (e.key === ' ') { e.preventDefault(); $('play').click(); }
 });
 

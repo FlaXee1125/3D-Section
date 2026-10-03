@@ -7,7 +7,7 @@ Dikelompokkan berdasarkan zona O (O1, O4, ... O10) dan skenario.
 """
 import os, sys, re, json, collections, math
 import numpy as np, ezdxf
-from shapely.geometry import Polygon, box, MultiPolygon, LineString
+from shapely.geometry import Polygon, box, MultiPolygon, LineString, Point
 from shapely.ops import unary_union
 from shapely import affinity
 
@@ -21,20 +21,31 @@ D0 = 0.5     # dasar saluran irigasi = 0,5 m di bawah muka tanah (arahan)
 REF_IRIGASI = {8339.85, 11625.23, 14064.93}
 # simpang (STA titik tengah) + tata letak tipikal dari data/simpang.json
 SIMPANG = [('Simpang 1', 3648.12), ('Simpang 2', 8328.29), ('Simpang 3', 12538.61), ('Simpang 4', 15349.0)]
-SP_W2 = 3.75       # setengah lebar jalan simpang (m), dibaca dari PDF
-SP_R = 20.0        # radius tikungan sudut (m)
-SP_G = 0.04        # kelandaian jalan simpang menjauhi jalan utama
-SP_UC = 0.75       # u pusat jalan simpang pada PDF
-SP_E0 = 12.353     # tepi bahu jalan utama
-def hw_fn(d):      # setengah lebar mulut simpang pada jarak d dari tepi bahu jalan utama
-    if d >= SP_R: return SP_W2
-    d = max(d, 0.0); return SP_W2 + SP_R - math.sqrt(max(0.0, SP_R**2 - (SP_R - d)**2))
-def map_v(v):      # v tipikal (PDF) -> offset model; lebar jalan utama PDF 12 m disesuaikan ke jalan utama 20,8 m
-    dv = v - 1.2; ad = abs(dv)
-    ad2 = ad * (10.4 / 6.0) if ad <= 6.0 else ad + 4.4
-    return math.copysign(ad2, dv)
-
 XL = 36.0   # jangkauan offset yang dimodelkan (m, kiri-kanan as jalan)
+SIMP = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'simpang.json')))
+_FR = SIMP['frame']; SP_UC = _FR['uc']; SP_SIDE = _FR['sisi']; SP_MAIN = _FR['tepi_utama']
+SP_G = 0.04        # kelandaian jalan simpang menjauhi jalan utama
+SP_E0 = 10.4       # tepi perkerasan jalan utama (offset)
+SP_REACH = 38.0    # jangkauan pemodelan simpang searah jalan utama (m dari titik tengah)
+MV_C = sum(SP_MAIN) / 2; MV_HW = (SP_MAIN[1] - SP_MAIN[0]) / 2
+def map_v_arr(v):  # v tipikal (PDF) -> offset model; lebar jalan utama pada PDF (tepi -4,9 .. 7,2) disesuaikan ke jalan utama model (±10,4 m)
+    v = np.asarray(v, dtype=float); dv = v - MV_C; ad = np.abs(dv)
+    return np.sign(dv) * np.where(ad <= MV_HW, ad * (SP_E0 / MV_HW), ad + (SP_E0 - MV_HW))
+def map_v(v): return float(map_v_arr(v))
+def _mirror(pts): return [(2 * SP_UC - u, v) for u, v in pts]
+def _flare(arc, edge_v, side_u):
+    a = sorted(arc, key=lambda p: abs(p[1]))
+    return Polygon(a + [(side_u, a[-1][1]), (side_u, edge_v), (a[0][0], edge_v)]).buffer(0)
+_west = [_flare(SIMP['arcs']['NW'], SP_MAIN[0], SP_SIDE[0]), _flare(SIMP['arcs']['SW'], SP_MAIN[1], SP_SIDE[0])]
+_pdf_fp = unary_union([Polygon([(SP_SIDE[0], -90), (SP_SIDE[1], -90), (SP_SIDE[1], 90), (SP_SIDE[0], 90)])] + _west +
+                      [Polygon(_mirror(list(p.exterior.coords))).buffer(0) for p in _west])
+def _to_model(geom):
+    import shapely
+    g = shapely.segmentize(geom, 0.4)
+    from shapely.ops import transform
+    return transform(lambda x, y: (np.asarray(x) - SP_UC, map_v_arr(y)), g)
+SP_FP = _to_model(_pdf_fp).intersection(box(-70, -XL - 1.0, 70, XL + 1.0))     # (t, offset) model; luar badan jalan = |x| > 10,4
+
 SRC = sys.argv[1]
 OUT = sys.argv[2] if len(sys.argv) > 2 else 'data/model.json'
 doc = ezdxf.readfile(SRC)
@@ -378,7 +389,6 @@ def rect(x0, y0, x1, y1, cw=False):
     r = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
     return r[::-1] if cw else r
 def flat(r): return [round(v, 3) for p in r for v in p]
-SIMP = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'simpang.json')))
 
 def find_sites(O, segs):
     """lokasi saluran irigasi melintang: rentang segmen bertipe Siphon / Talang (kedua skenario).
@@ -411,11 +421,10 @@ def find_sites(O, segs):
         d = max(0.5, gavg - zb); zb = gavg - d
         Wt = float(np.clip(0.7 * min(run, 20.0), 2.5, 8.0)); bw = max(0.8, Wt - 2 * d)
         zc = ZC
-        for sn, ss in SIMPANG:                       # gorong-gorong lewat di bawah mulut simpang
-            t = abs(sc - ss)
-            if t < SP_W2 + SP_R:
-                dmax = max([dd for dd in np.arange(0, SP_R + 0.01, 0.25) if hw_fn(dd) >= t] or [0])
-                zc = max(zc, SP_E0 + dmax + 1.0)
+        for sn, ss in SIMPANG:                       # gorong-gorong lewat di bawah mulut simpang (sampai di luar kerb + lereng)
+            if abs(sc - ss) < SP_REACH:
+                it = SP_FP.intersection(box(sc - ss - bw / 2 - 1.0, -XL - 1, sc - ss + bw / 2 + 1.0, XL + 1))
+                if not it.is_empty: zc = max(zc, min(XL - 1.0, max(abs(it.bounds[1]), abs(it.bounds[3])) + 2.5))
         sites.append(dict(sta=round(sc, 2), a=round(sa, 2), b=round(sb, 2), zb=round(zb, 3), d=round(d, 3), bw=round(bw, 3), ground=round(gavg, 3), zc=round(zc, 2),
                           ref=bool(refs)))
     return sites
@@ -511,7 +520,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
         bf = [build_frame(f, floor, override=ov_arg(f)) for f in secs]
         built = [{k: (mat, poly) for k, mat, poly in els} for els, _ in bf]
         stas = [s_['sta'] for s_ in secs]; sa_, sb_ = stas[0], stas[2]
-        sp_here = [sp for sp in simps if sp['sta'] - (SP_W2 + SP_R + 8) < sb_ and sp['sta'] + (SP_W2 + SP_R + 8) > sa_]
+        sp_here = [sp for sp in simps if sp['sta'] - SP_REACH < sb_ and sp['sta'] + SP_REACH > sa_]
         # saluran yang bergeser (belok/melipir) -> stasiun tambahan tiap 40 m agar takik timbunan mengikuti saluran
         def hb_of(ea, s_):
             h = ea['hulls'].get(s_); return None if h is None else h.bounds
@@ -528,7 +537,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                 for t in np.arange(st['sta'] - ext, st['sta'] + ext + 1e-6, 0.25):
                     if sa_ + 0.01 < t < sb_ - 0.01: T.append(round(float(t), 3))
         for sp in sp_here:
-            for t in np.arange(sp['sta'] - (SP_W2 + SP_R + 6), sp['sta'] + (SP_W2 + SP_R + 6) + 1e-6, 0.5):
+            for t in np.arange(sp['sta'] - SP_REACH, sp['sta'] + SP_REACH + 1e-6, 0.25):
                 if sa_ + 0.01 < t < sb_ - 0.01: T.append(round(float(t), 3))
         if moving:
             for t in np.arange(sa_ + 40.0, sb_ - 20.0, 40.0): T.append(round(float(t), 3))
@@ -563,8 +572,8 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                     hx0, hy0, hx1, hy1 = h.bounds
                     grid |= {round(hx0, 4), round(hx0 + 1e-3, 4), round(hx1 - 1e-3, 4), round(hx1, 4)} | {round(p[0], 4) for p in h.exterior.coords}
         if sp_here:
-            for k_ in range(0, 50):
-                for sg in (1, -1): grid.add(round(sg * (SP_E0 + 0.5 * k_), 4))
+            for k_ in range(0, 106):
+                for sg in (1, -1): grid.add(round(sg * (SP_E0 + 0.25 * k_), 4))
         grid = {v for v in grid if -XL <= v <= XL}
         grid = sorted(grid); ug = []
         for v in grid:
@@ -587,19 +596,28 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             tl = float(np.interp(t, stas, [x[0] for x in toes])); tr_ = float(np.interp(t, stas, [x[1] for x in toes]))
             Vv = Fv.copy()
             dk = float(np.interp(t, stas, decks))
-            for sp in sp_here:                      # jalan simpang: timbunan + perkerasan
-                tt = abs(t - sp['sta'])
-                dd = np.maximum(np.abs(xa) - SP_E0, 0.0)
-                hwv = np.array([hw_fn(v) for v in dd])
-                e0 = dk - 0.533
-                Hs = e0 - SP_G * dd
-                outside = np.maximum(0.0, tt - hwv)
-                Fsub = Hs - 0.4 - 0.5 * outside
+            for sp in sp_here:                      # jalan simpang: timbunan + perkerasan (bentuk dari PDF tipikal)
+                import shapely
+                tt = t - sp['sta']
+                pts_ = shapely.points(np.full(len(xa), tt), xa)
                 on = np.abs(xa) >= SP_E0 - 1e-9
-                Fn = np.where(on, np.maximum(Fv, Fsub), Fv)
-                inside = on & (tt <= hwv)
-                Vv = np.where(inside, np.maximum(Hs, Fn), Fn)
+                inside = on & shapely.contains_xy(SP_FP, np.full(len(xa), tt), xa)
+                dist = np.where(inside, 0.0, shapely.distance(SP_FP, pts_))
+                dd = np.maximum(np.abs(xa) - SP_E0, 0.0)
+                Hs = (dk + deck_top(SP_E0)) - SP_G * dd
+                Fsub = Hs - 0.4 - 0.5 * dist
+                prot = np.zeros(len(xa), dtype=bool)               # takik saluran terbuka tidak boleh tertimbun lereng simpang
+                for s_, h in hullT[t].items():
+                    if h is None: continue
+                    hx0, hy0, hx1, hy1 = h.bounds; prot |= (xa > hx0 - 0.3) & (xa < hx1 + 0.3)
+                Fn = np.where(on & (inside | ~prot), np.maximum(Fv, Fsub), Fv)
+                Vv = np.where(inside, np.maximum(Hs, Fn), np.where(on, np.maximum(Vv, Fn), Vv))
                 Fv = Fn
+            for st, ext in trench:          # gorong-gorong irigasi di bawah mulut simpang: tutup dengan timbunan sampai awal saluran terbuka
+                if st['zc'] > ZC + 1:
+                    cover = st['zb'] + CH + WALL + 0.25 - 0.5 * max(0.0, abs(t - st['sta']) - (st['bw'] / 2 + WALL))
+                    m2 = (np.abs(xa) >= SP_E0) & (np.abs(xa) < st['zc'])
+                    Fv = np.where(m2, np.maximum(Fv, cover), Fv); Vv = np.where(m2, np.maximum(Vv, np.minimum(cover, Fv)), Vv)
             for st, ext in trench:
                 hf = st['zb'] + np.maximum(0.0, abs(t - st['sta']) - st['bw'] / 2) * 1.0
                 m = np.abs(xa) >= st['zc'] - 1e-9
@@ -608,8 +626,14 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             outside_t = (xa <= tl + 1e-6) | (xa >= tr_ - 1e-6)
             Pv = Sv - TS * outside_t
             FT.append(np.round(Fv, 2).tolist()); ST.append(np.round(Sv, 2).tolist()); PT.append(np.round(Pv, 2).tolist()); VT.append(np.round(Vv, 2).tolist())
-        earth_out = {'x': ug, 'F': FT, 'S': ST, 'P': PT}
-        if sp_here: earth_out['V'] = VT
+        def enc(rows):          # cm bulat, delta antar kolom (jauh lebih pendek di JSON)
+            out_ = []
+            for r_ in rows:
+                iv = [int(round(v * 100)) for v in r_]
+                out_.append([iv[0]] + [iv[i] - iv[i-1] for i in range(1, len(iv))])
+            return out_
+        earth_out = {'x': ug, 'F': enc(FT), 'S': enc(ST), 'toe': [[round(float(np.interp(t_, stas, [x_[0] for x_ in toes])), 2), round(float(np.interp(t_, stas, [x_[1] for x_ in toes])), 2)] for t_ in T], 'enc': 1}
+        if sp_here: earth_out['V'] = enc(VT)
         if refined: earth_out['sta'] = T
         i3 = [T.index(v) for v in stas] if refined else [0, 1, 2]
         def surf(sta_, x_):
@@ -624,8 +648,15 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                 if k not in keys: keys.append(k)
         elements = []
         # jendela bukaan (median / pagar pengaman terputus di mulut simpang)
-        gaps_med = [[sp['sta'] - 6.75, sp['sta'] + 6.75] for sp in sp_here]
-        gaps_rail = [[sp['sta'] - (SP_W2 + SP_R), sp['sta'] + (SP_W2 + SP_R)] for sp in sp_here]
+        def rail_gap(sp):
+            iv = []
+            for xr in (SP_E0 + 1.35, -(SP_E0 + 1.35)):               # garis guardrail (offset ±11,75)
+                it = SP_FP.intersection(LineString([(-70, xr), (70, xr)]).buffer(0.05))
+                if not it.is_empty: iv.append((it.bounds[0], it.bounds[2]))
+            if not iv: return None
+            return [sp['sta'] + min(a_ for a_, b_ in iv) - 1.0, sp['sta'] + max(b_ for a_, b_ in iv) + 1.0]
+        gaps_med = [[sp['sta'] + (-18.6), sp['sta'] + 17.8] for sp in sp_here]          # bukaan median: dari stop-bar zebra barat ke timur (PDF)
+        gaps_rail = [g_ for g_ in (rail_gap(sp) for sp in sp_here) if g_]
         def pieces(a, b, gaps):
             out = [(a, b)]
             for g0, g1 in gaps:
@@ -693,7 +724,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                     elements.append({'k': f'pem{s_}{n_}', 'm': 'pematang', 'r': rg})
         for stn in range(int(math.ceil(sa_ / 25.0)), int(math.floor(sb_ / 25.0)) + 1):
             stv = stn * 25.0
-            if not (sa_ <= stv < sb_) or any(abs(stv - st_['sta']) < ext_ + 1.5 for st_, ext_ in trench) or any(abs(stv - sp['sta']) < SP_W2 + SP_R + 7 for sp in sp_here): continue
+            if not (sa_ <= stv < sb_) or any(abs(stv - st_['sta']) < ext_ + 1.5 for st_, ext_ in trench) or any(abs(stv - sp['sta']) < SP_REACH for sp in sp_here): continue
             ti = int(np.argmin([abs(stv - t) for t in T]))
             for s_ in 'US':
                 sign = -1 if s_ == 'U' else 1
@@ -703,51 +734,51 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                     sv = float(np.interp(sign * (x0_ + x1_) / 2, ug, ST[ti]))
                     zel.append({'m': 'pematang', 'k': 'pemx', 'rings': [flat(rect(stv - 0.2, sv - 0.6, stv + 0.2, sv + 0.3))],
                                 'z0': round(min(sign * x0_, sign * x1_), 3), 'z1': round(max(sign * x0_, sign * x1_), 3)})
-        # --- perlengkapan simpang: marka zebra, catch basin, bak kontrol, manhole, catch drain & pipa (tata letak dari PDF tipikal)
-        yel = []
-        def in_seg(sta_): return sa_ <= sta_ < sb_
+        # --- perlengkapan simpang (semua dari PDF tipikal): marka, pulau berkerb, catch drain, catch basin, bak kontrol, manhole, pipa
+        sl = []
+        def plane_at(sta_, x_):
+            dk_ = float(np.interp(sta_, stas, decks)); ax = abs(x_); sg = 1.0 if x_ >= 0 else -1.0
+            if ax <= SP_E0:
+                return dk_ + deck_top(ax), sg * (deck_top(min(ax + 0.1, SP_E0)) - deck_top(max(ax - 0.1, 0.0))) / (min(ax + 0.1, SP_E0) - max(ax - 0.1, 0.0))
+            return dk_ + deck_top(SP_E0) - SP_G * (ax - SP_E0), -SP_G * sg
+        def orient_rings(pg):
+            from shapely.geometry.polygon import orient
+            pg = orient(pg, 1.0)
+            return [flat(list(pg.exterior.coords)[:-1])] + [flat(list(h.coords)[:-1]) for h in pg.interiors]
+        def add_slab(m, k, geom, hb, ht, split_bands=False, y_from_surface=False, dy=0.0):
+            geom = geom.intersection(box(sa_, -XL - 1, sb_, XL + 1))
+            bands = [(-1e3, -SP_E0), (-SP_E0, 0.0), (0.0, SP_E0), (SP_E0, 1e3)] if split_bands else [(-1e3, 1e3)]
+            for x0_, x1_ in bands:
+                part = geom.intersection(box(-1e7, x0_, 1e7, x1_)) if split_bands else geom
+                for pg in polys(part):
+                    if pg.area < 2e-4: continue
+                    c = pg.centroid; yy, gx = plane_at(c.x, c.y)
+                    if y_from_surface: yy = surf(c.x, c.y)
+                    sl.append({'m': m, 'k': k, 'rings': orient_rings(pg), 'y0': round(yy + dy, 3), 'gx': round(gx, 4), 'z0': round(c.y, 3), 'hb': hb, 'ht': ht})
         for sp in sp_here:
             ss = sp['sta']
-            def P(u, v): return (ss + (u - SP_UC), map_v(v))
-            for xs_ in (1, -1):                                            # zebra cross di jalan simpang (dua pendekatan)
-                zx = xs_ * 24.8
-                for k_ in range(8):
-                    st_ = ss + (-3.35 + 0.9 * k_)
-                    if in_seg(st_):
-                        ys = surf(st_, zx)
-                        zel.append({'m': 'marka', 'k': 'zebra', 'rings': [flat(rect(st_ - 0.25, ys - 0.03, st_ + 0.25, ys + 0.012))], 'z0': round(zx - 1.5, 3), 'z1': round(zx + 1.5, 3)})
-            for xs_ in (1, -1):                                            # zebra cross melintang jalan utama
-                ub = ss + xs_ * 16.4
-                if in_seg(ub):
-                    for k_ in range(-11, 12):
-                        zc0 = k_ * 0.9
-                        ys = float(np.interp(ub, stas, decks)) + deck_top(abs(zc0))
-                        zel.append({'m': 'marka', 'k': 'zebra', 'rings': [flat(rect(ub - 1.5, ys - 0.03, ub + 1.5, ys + 0.012))], 'z0': round(zc0 - 0.25, 3), 'z1': round(zc0 + 0.25, 3)})
+            def M(geom_uv):                          # (u,v) PDF -> (sta, offset) model
+                g = _to_model(geom_uv); from shapely import affinity as af
+                return af.translate(g, ss, 0)
+            for ring_ in SIMP['marka']:
+                try: pg = Polygon(ring_).buffer(0)
+                except Exception: continue
+                if pg.is_empty or pg.area < 1e-4: continue
+                add_slab('marka', 'marka', M(pg), 0.04, 0.012, split_bands=True)
+            for (p0, p1) in SIMP['stop']:
+                add_slab('marka', 'stop', M(LineString([tuple(p0), tuple(p1)]).buffer(0.2, cap_style=2)), 0.04, 0.012, split_bands=True)
+            for isl in SIMP['islands']:
+                inner = Polygon(isl['inner']).buffer(0); outer = Polygon(isl['outer']).buffer(0)
+                add_slab('island', 'pulau', M(inner), 0.35, 0.15)
+                add_slab('cdrain', 'cd', M(outer.difference(inner)), 0.4, 0.015)
             for (u, v) in SIMP['cb']:
-                p = P(u, v)
-                if in_seg(p[0]) and abs(p[1]) < XL - 0.5:
-                    ys = surf(p[0], p[1]); r_ = ccw(rect(p[0] - 0.3, p[1] - 0.3, p[0] + 0.3, p[1] + 0.3))
-                    yel.append({'m': 'cb', 'k': 'cb', 'ring': flat(r_), 'y0': round(ys - 0.8, 3), 'y1': round(ys + 0.03, 3)})
-            for b in SIMP['bk']:
-                p = P(b[0], b[1])
-                if in_seg(p[0]) and abs(p[1]) < XL - 0.5:
-                    ys = surf(p[0], p[1]); r_ = ccw(rect(p[0] - 0.55, p[1] - 0.55, p[0] + 0.55, p[1] + 0.55))
-                    yel.append({'m': 'bk', 'k': 'bk', 'ring': flat(r_), 'y0': round(ys - 1.2, 3), 'y1': round(ys + 0.04, 3)})
+                add_slab('cb', 'cb', M(box(u - 0.3, v - 0.3, u + 0.3, v + 0.3)), 0.8, 0.03, y_from_surface=True)
+            for b_ in SIMP['bk']:
+                add_slab('bk', 'bk', M(box(b_[0] - 0.55, b_[1] - 0.55, b_[0] + 0.55, b_[1] + 0.55)), 1.2, 0.04, y_from_surface=True)
             for (u, v) in SIMP['mh']:
-                p = P(u, v)
-                if in_seg(p[0]) and abs(p[1]) < XL - 0.5:
-                    ys = surf(p[0], p[1]); r_ = ccw([(p[0] + 0.45 * math.cos(a), p[1] + 0.45 * math.sin(a)) for a in np.linspace(0, 2 * math.pi, 13)[:-1]])
-                    yel.append({'m': 'mh', 'k': 'mh', 'ring': flat(r_), 'y0': round(ys - 1.5, 3), 'y1': round(ys + 0.04, 3)})
+                add_slab('mh', 'mh', M(Point(u, v).buffer(0.45, 8)), 1.5, 0.04, y_from_surface=True)
             for chn in SIMP['pipa']:
-                pts_ = [P(u, v) for u, v in chn]
-                for a_, b_ in zip(pts_[:-1], pts_[1:]):
-                    mid = ((a_[0] + b_[0]) / 2, (a_[1] + b_[1]) / 2)
-                    if not in_seg(mid[0]) or abs(mid[1]) > XL - 0.5: continue
-                    ys = surf(mid[0], mid[1])
-                    rb = ribbon(a_, b_, 0.6)
-                    if rb: yel.append({'m': 'cdrain', 'k': 'cd', 'ring': flat(ccw(rb)), 'y0': round(ys - 0.4, 3), 'y1': round(ys + 0.02, 3)})
-                    rp = ribbon(a_, b_, 0.3)
-                    if rp: yel.append({'m': 'pipa', 'k': 'pp', 'ring': flat(ccw(rp)), 'y0': round(ys - 0.95, 3), 'y1': round(ys - 0.65, 3)})
+                add_slab('pipa', 'pp', M(LineString([tuple(q) for q in chn]).buffer(0.15, cap_style=2, join_style=2)), 0.15, 0.15, y_from_surface=True, dy=-0.8)
         water = None
         if O in FLOOD and not refined and all(bf[i][1]['hx1S'] is not None for i in range(3)) and all(mab[(sal, bag)].get(p) is not None for p in POS):
             W = [MAB0] * 3
@@ -767,7 +798,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             'sta': stas, 'deck': decks, 'irig': ov_st[0] if ov_st else None,
             'simpang': [sp['name'] for sp in sp_here] or None,
             'gaps': {'gpost': gaps_rail} if sp_here else None,
-            'info': infos, 'earth': earth_out, 'water': water, 'zel': zel, 'yel': yel, 'els': elements,
+            'info': infos, 'earth': earth_out, 'water': water, 'zel': zel, 'sl': sl, 'els': elements,
             **({'revisi': okind} if ovr else {})})
     allsta = [s for sk in z['skenario'].values() for sg in sk for s in sg['sta']]
     z['sta'] = [min(allsta), max(allsta)]

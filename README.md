@@ -46,14 +46,16 @@ python3 tools/dxf_to_model.py data/source/3d-Modeling.dxf data/model.json
 
 ## Simpang dan lokasi irigasi
 - **Simpang** (STA tengah): Simpang 1 3+648,12 · Simpang 2 8+328,29 · Simpang 3 12+538,61 · Simpang 4 15+349. Hanya yang jatuh di STA yang punya gambar potongan
-  yang dimodelkan (Simpang 2 di O5 dan Simpang 4 di O9; Simpang 1 dan 3 berada di celah STA tanpa gambar). Di atas box culvert / siphon jalan simpang
-  dibuat sebagai timbunan + perkerasan dengan tikungan sudut (R 20 m), median dan guardrail jalan utama diputus di mulut simpang.
-- Tata letak drainase (catch basin 20, bak kontrol 6, manhole 6, catch drain/pipa Ø300) dibaca dari `data/source/TIPIKAL_DRAINASE_SIMPANG_1.pdf`
-  (`tools/pdf_to_simpang.py` → `data/simpang.json`), skala gambar 8,27 pt/m; jarak ke tepi jalan utama disesuaikan dengan lebar jalan utama model.
-  Pipa Ø300 digambar sebagai balok persegi 0,3 m di bawah tanah; matikan Tanah/Timbunan/Perkerasan di legenda untuk melihatnya.
+  yang dimodelkan (Simpang 2 di O5 dan Simpang 4 di O9; Simpang 1 dan 3 berada di celah STA tanpa gambar).
+- Bentuk simpang **dibaca langsung dari vektor PDF tipikal** (`tools/pdf_to_simpang.py` → `data/simpang.json`): lengkung kerb sudut, tepi jalan simpang (5,05 m),
+  pulau berkerb dan catch drain, **seluruh marka** (zebra cross, stop bar, garis tengah putus-putus, chevron, panah), catch basin (20), bak kontrol (6), manhole (6), pipa Ø300.
+  Skala 8,27 pt/m; lebar jalan utama pada PDF (±6 m) diregangkan ke jalan utama model (±10,4 m), selebihnya digeser. Median jalan utama dan guardrail terputus di mulut simpang
+  (bukaan median mengikuti stop bar zebra di PDF).
+- Hanya garis lajur jalan utama yang jauh dari simpang dan teks "STOP" yang tidak dibawa (jalan utama memakai penampang DXF).
+- Pipa Ø300 digambar sebagai balok persegi 0,3 m di bawah tanah; matikan Tanah/Timbunan/Perkerasan di legenda (atau tombol **Tembus tanah**) untuk melihatnya.
+- Panel kontrol di bawah bisa dilipat dengan tombol ▾ (atau tekan **H**).
 - **Saluran irigasi**: di setiap siphon/talang. Titik pusat = *STA titik acuan* siphon pada `Data_Drainase_Rev19.xlsx` (sheet Bangunan: 8+339,85 · 11+625,23 · 14+064,93)
   bila ada, selain itu tengah rentang bangunan. Lokasi pasti belum terkonfirmasi (kemungkinan bergeser ±3 m); ubah `REF_IRIGASI` di `tools/dxf_to_model.py`.
-- Talang Skenario 1 yang tidak punya siphon di Skenario 2 (O6 STA 9+942,9–9+949,9; O9 14+714,76–14+718,76 dan 14+721–14+729) otomatis dimodelkan siphon di Skenario 2.
 
 ## Penyeberang saluran irigasi (talang / siphon)
 - Di tiap lokasi irigasi, saluran drainase jalan diseragamkan agar konsepnya jelas: **Skenario 1 = talang** (flume terbuka, di atas saluran irigasi, berisi air),

@@ -123,20 +123,51 @@ export function prismY(ring, y0, y1, sta0, out) {
   }
 }
 
+// Pelat (slab) berbidang miring: cincin (STA, offset) [luar CCW, lubang CW], permukaan y = y0 + gx*(z - z0); tebal dari y-hb s/d y+ht
+export function slab(rings, y0, gx, z0, hb, ht, sta0, out) {
+  const Y = z => y0 + gx * (z - z0);
+  for (const r of rings) {
+    const n = r.length / 2;
+    for (let k = 0; k < n; k++) {
+      const k2 = (k + 1) % n, x1 = r[2*k] - sta0, z1 = r[2*k+1], x2 = r[2*k2] - sta0, z2 = r[2*k2+1];
+      const dx = x2 - x1, dz = z2 - z1; if (Math.hypot(dx, dz) < 1e-9) continue;
+      const nrm = [dz, 0, -dx];
+      tri(out, [x1, Y(z1) - hb, z1], [x2, Y(z2) - hb, z2], [x2, Y(z2) + ht, z2], nrm);
+      tri(out, [x1, Y(z1) - hb, z1], [x2, Y(z2) + ht, z2], [x1, Y(z1) + ht, z1], nrm);
+    }
+  }
+  const v = r => { const a = []; for (let k = 0; k < r.length; k += 2) a.push(new Vector2(r[k] - sta0, r[k+1])); return a; };
+  const contour = v(rings[0]), holes = rings.slice(1).map(v);
+  let faces; try { faces = ShapeUtils.triangulateShape(contour, holes); } catch (e) { return; }
+  const all = contour.concat(...holes);
+  for (const [a, b, c] of faces) for (const [d, dir] of [[ht, 1], [-hb, -1]]) {
+    const Q = i => [all[i].x, Y(all[i].y) + d, all[i].y];
+    tri(out, Q(a), Q(b), Q(c), [0, dir, 0]);
+  }
+}
+
 // segs: daftar segmen satu skenario; kembalikan {mat: Float32Array posisi}
+function decodeEarth(e, ts) {            // delta cm -> meter; P (lapisan sawah) dihitung dari S dan kaki timbunan
+  if (e._d) return e; e._d = true;
+  const dec = rows => rows.map(r => { const o = new Array(r.length); let a = 0; for (let i = 0; i < r.length; i++) { a += r[i]; o[i] = a / 100; } return o; });
+  e.F = dec(e.F); e.S = dec(e.S); if (e.V) e.V = dec(e.V);
+  e.P = e.S.map((row, k) => row.map((v, i) => { const x = e.x[i]; return (x <= e.toe[k][0] + 1e-6 || x >= e.toe[k][1] - 1e-6) ? v - 0.25 : v; }));
+  return e;
+}
+
 export function buildGeometry(segs, sta0, floor, irig) {
   const buf = {};
   const get = m => buf[m] || (buf[m] = []);
   for (const seg of segs) {
     const X = seg.sta.map(v => v - sta0);
-    const e = seg.earth, XE = (e.sta || seg.sta).map(v => v - sta0);
+    const e = decodeEarth(seg.earth), XE = (e.sta || seg.sta).map(v => v - sta0);
     strip(e.x, e.P, e.S.map(r => r.map(() => floor)), XE, get('ground'));
     strip(e.x, e.S, e.P, XE, get('sawah'));
     if (e.V) strip(e.x, e.V, e.F, XE, get('pav'));
     strip(e.x, e.F, e.S, XE, get('fill'));
     if (seg.water) strip(e.x, seg.water.top, e.S, X, get('water'));
     for (const z of seg.zel || []) prismZ(z.rings, z.z0, z.z1, sta0, get(z.m));
-    for (const y of seg.yel || []) prismY(y.ring, y.y0, y.y1, sta0, get(y.m));
+    for (const q of seg.sl || []) slab(q.rings, q.y0, q.gx, q.z0, q.hb, q.ht, sta0, get(q.m));
     for (const el of seg.els) {
       const out = get(el.m);
       const XS = el.xs ? el.xs.map(v => v - sta0) : X, N = el.r.length;

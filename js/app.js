@@ -18,7 +18,8 @@ const MATS = {
   sawah:   { c: 0x74b04c, n: 'Sawah' },
   pematang:{ c: 0xc9ab70, n: 'Pematang sawah' },
   bore:    { c: 0x0b0f14, n: 'Rongga siphon / gorong-gorong' },
-  marka:   { c: 0xf2f2ee, n: 'Marka zebra cross' },
+  marka:   { c: 0xf4f4f0, n: 'Marka jalan (zebra, stop, chevron, garis)' },
+  island:  { c: 0xc3c8cd, n: 'Pulau berkerb' },
   cdrain:  { c: 0x2b3038, n: 'Catch drain (selokan pulau simpang)' },
   cb:      { c: 0xd9372f, n: 'Catch basin 60×60 cm' },
   bk:      { c: 0xb98bd9, n: 'Bak kontrol 110×110 cm' },
@@ -273,6 +274,15 @@ $('btnXray').onclick = e => {
   document.querySelectorAll('#legend label').forEach((l, i) => { const m = ORDER[i]; if (hide.includes(m)) { l.querySelector('input').checked = !xray; S.vis[m] = !xray; } });
   applyPlanes();
 };
+const panel = $('panel'), pbtn = $('btnPanel');
+const setPanel = on => {
+  document.body.classList.toggle('nopanel', !on); pbtn.textContent = on ? '▾' : '▴'; pbtn.setAttribute('aria-expanded', on);
+  try { localStorage.setItem('panel', on ? '1' : '0'); } catch (e) {}
+  requestAnimationFrame(() => document.documentElement.style.setProperty('--panel-h', (on ? panel.offsetHeight : 0) + 'px'));
+};
+pbtn.onclick = () => setPanel(document.body.classList.contains('nopanel'));
+addEventListener('resize', () => { if (!document.body.classList.contains('nopanel')) document.documentElement.style.setProperty('--panel-h', panel.offsetHeight + 'px'); });
+try { setPanel(localStorage.getItem('panel') !== '0'); } catch (e) { setPanel(true); }
 const goFull = () => { try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => toast('Layar penuh ditolak browser. Buka link di tab sendiri lalu tekan F11.')); } catch (e) { toast('Layar penuh tidak didukung. Tekan F11.'); } };
 $('btnFull').onclick = goFull;
 document.addEventListener('fullscreenchange', () => { $('btnFull').textContent = document.fullscreenElement ? '⛶ Keluar layar penuh' : '⛶ Layar penuh'; });
@@ -283,6 +293,7 @@ addEventListener('keydown', e => {
   if (/INPUT|SELECT/.test(document.activeElement.tagName) && document.activeElement.type !== 'range') return;
   if (e.key === 'ArrowRight') setSTA(S.s + (e.shiftKey ? 10 : 1)); else if (e.key === 'ArrowLeft') setSTA(S.s - (e.shiftKey ? 10 : 1));
   else if (e.key === 'f' || e.key === 'F') goFull();
+  else if (e.key === 'h' || e.key === 'H') pbtn.click();
   else if (e.key === ' ') { e.preventDefault(); $('play').click(); }
 });
 

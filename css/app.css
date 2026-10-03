@@ -54,3 +54,8 @@ footer{background:var(--panel);border-top:1px solid var(--line);padding:8px 14px
 @media (max-width:760px){.brand span{display:none}.views{margin-left:0}.card{font-size:11px;padding:6px 8px}}
 
 .card .note{margin-top:3px;max-width:430px;white-space:normal;line-height:1.3}
+
+.panelbtn{position:fixed;left:50%;transform:translateX(-50%);bottom:var(--panel-h,150px);z-index:20;width:54px;height:20px;line-height:16px;padding:0;border-radius:10px 10px 0 0;font-size:13px;background:var(--panel);border:1px solid var(--line);border-bottom:0;color:var(--muted)}
+body.nopanel #panel{display:none}
+body.nopanel{grid-template-rows:auto 1fr}
+body.nopanel .panelbtn{bottom:0}

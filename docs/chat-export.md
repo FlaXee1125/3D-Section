@@ -44,3 +44,6 @@ data (`data/model.json`). Lihat `README.md`.
 ## 9. Simpang, irigasi (xlsx), siphon O9
 - Simpang 2 (8+328,29) dan Simpang 4 (15+349) dimodelkan dari PDF tipikal; Simpang 1 dan 3 di luar STA gambar.
 - Lokasi irigasi mengikut STA titik acuan siphon (xlsx), kemungkinan bergeser sampai 3 m.
+
+## 10. Simpang plek PDF, saluran tidak tertimbun, panel lipat
+- Bentuk, marka, pulau, drainase simpang dari vektor PDF; saluran terbuka dilindungi dari lereng simpang; panel kontrol bisa dilipat.

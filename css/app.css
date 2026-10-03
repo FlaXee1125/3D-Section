@@ -17,7 +17,7 @@ main{position:relative;min-height:0}
 .pane.left{left:0}.pane.right{right:0}
 .tag{position:absolute;top:10px;left:12px;padding:3px 10px;border-radius:6px;font-weight:700;letter-spacing:.06em;font-size:12px;color:#06121b}
 .tag.s1{background:var(--s1)}.tag.s2{background:var(--s2)}
-.card{position:absolute;left:10px;bottom:10px;max-width:calc(100% - 20px);background:#0d1620e6;border:1px solid var(--line);border-radius:9px;padding:8px 11px;backdrop-filter:blur(4px);font-size:12px}
+.card{pointer-events:auto;position:absolute;left:10px;bottom:10px;max-width:calc(100% - 20px);background:#0d1620e6;border:1px solid var(--line);border-radius:9px;padding:8px 11px;backdrop-filter:blur(4px);font-size:12px}
 .card h4{margin:0 0 4px;font-size:12px;color:var(--muted);font-weight:600}
 .card table{border-collapse:collapse}.card td,.card th{padding:1px 8px 1px 0;text-align:left;font-weight:400;white-space:nowrap}
 .card th{color:var(--muted)}.card .d{color:var(--acc);font-weight:600}
@@ -48,7 +48,7 @@ footer{background:var(--panel);border-top:1px solid var(--line);padding:8px 14px
 .opts input[type=range]{width:130px;accent-color:var(--acc)}
 .opts .chk{color:var(--fg)}
 .views{display:flex;gap:6px;margin-left:auto}
-.legend{display:flex;gap:6px 14px;flex-wrap:wrap}
+.legend{display:block}
 .legend label{display:flex;gap:6px;align-items:center;cursor:pointer;font-size:12px}
 .legend i{width:11px;height:11px;border-radius:3px;display:inline-block;border:1px solid #0006}
 @media (max-width:760px){.brand span{display:none}.views{margin-left:0}.card{font-size:11px;padding:6px 8px}}
@@ -59,3 +59,19 @@ footer{background:var(--panel);border-top:1px solid var(--line);padding:8px 14px
 body.nopanel #panel{display:none}
 body.nopanel{grid-template-rows:auto 1fr}
 body.nopanel .panelbtn{bottom:0}
+
+.card .ch{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.card .ch h4{margin:0}
+.card .cx{padding:0 7px;line-height:18px;border-radius:6px;font-size:12px;background:transparent;color:var(--muted)}
+.card.closed .cb{display:none}
+.card.closed{padding:5px 8px}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{display:flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;font-size:12px;color:var(--muted);background:var(--panel2)}
+.chip .sw{display:flex}.chip .sw i{width:9px;height:14px;display:inline-block;border:1px solid #0007;margin-right:-3px;border-radius:3px}
+.chip{opacity:.55}.chip.part{opacity:.85;border-style:dashed}.chip.on{opacity:1;color:var(--fg);border-color:var(--acc);background:#16354a}
+.chip.more{opacity:1;background:transparent;border-style:dotted}
+.legend .detail{display:flex;gap:6px 14px;flex-wrap:wrap;margin-top:8px}
+
+.legend .detail[hidden]{display:none}
+
+[hidden]{display:none!important}

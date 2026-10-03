@@ -150,14 +150,16 @@ function delta(a, b) {
   const d = b - a, c = Math.abs(d) < 0.0005 ? 'eq' : d > 0 ? 'up' : 'dn';
   return ` <span class="delta ${c}">${Math.abs(d) < 0.0005 ? '±0' : (d > 0 ? '+' : '') + d.toFixed(3)}</span>`;
 }
-function cardHTML(sm, ref) {
-  if (!sm) return `<h4>STA ${fmtSTA(S.s)}</h4><div class="none">Tidak ada gambar teknis pada STA ini</div>`;
+const cardOpen = { L: true, R: true };
+const cx = id => `<button class="cx" data-c="${id}" title="Buka / tutup tabel (I)" aria-label="Buka atau tutup tabel">${cardOpen[id] ? '▾' : '▴'}</button>`;
+function cardHTML(sm, ref, id) {
+  if (!sm) return `<div class="ch"><h4>STA ${fmtSTA(S.s)}</h4>${cx(id)}</div><div class="cb"><div class="none">Tidak ada gambar teknis pada STA ini</div></div>`;
   const row = (lab, fn) => `<tr><th>${lab}</th><td>${fn('U')}</td><td>${fn('S')}</td></tr>`;
   const get = (x, k, f) => x ? x[k][f] : null;
   const typ = k => { const d = sm[k]; return d.type ? `${d.type}<br><span class="muted">${d.ctx || ''}</span>` : '–'; };
   const num = (f, k) => f3(sm[k][f]) + (ref ? delta(ref[k][f], sm[k][f]) : '');
   const notes = [...new Set(['U', 'S'].flatMap(k => sm[k].note || []))];
-  return `<h4>${sm.seg.id} · ${sm.near}</h4>
+  return `<div class="ch"><h4>${sm.seg.id} · ${sm.near}</h4>${cx(id)}</div><div class="cb">
   <table><tr><th></th><th>UTARA</th><th>SELATAN</th></tr>
   ${row('Tipe', typ)}${row('Top (m)', k => num('top', k))}${row('Dasar (m)', k => num('bottom', k))}
   ${row('Tanah (m)', k => num('ground', k))}
@@ -165,13 +167,19 @@ function cardHTML(sm, ref) {
   ${sm.seg.simpang ? `<tr><th>Simpang</th><td colspan="2" style="color:#f2cf2e">${sm.seg.simpang.join(', ')} (tipikal dari PDF)</td></tr>` : ''}
   ${sm.seg.irig ? `<tr><th>Irigasi</th><td colspan="2" style="color:#6db3ff">saluran melintang jalan: dasar ${f3(sm.seg.irig.zb)} m, lebar dasar ${sm.seg.irig.bw.toFixed(1)} m (asumsi)</td></tr>` : ''}
   ${sm.water != null ? `<tr><th>MAB banjir</th><td colspan="2" style="color:#6db3ff">${f3(sm.water)} m (selatan jalan)</td></tr>` : ''}</table>
-  ${notes.length ? `<div class="muted note">${notes.join(' · ')}</div>` : ''}`;
+  ${notes.length ? `<div class="muted note">${notes.join(' · ')}</div>` : ''}</div>`;
 }
+document.querySelectorAll('.card').forEach(el => el.addEventListener('click', e => {
+  const b = e.target.closest('.cx'); if (!b) return;
+  cardOpen[b.dataset.c] = !cardOpen[b.dataset.c]; updateCards();
+}));
+function toggleCards() { const on = !(cardOpen.L || cardOpen.R); cardOpen.L = cardOpen.R = on; updateCards(); }
 function updateCards() {
   const a = views[0] && segAt(views[0].segs, S.s), b = views[1] && segAt(views[1].segs, S.s);
   const sa = a && sample(a, S.s), sb = b && sample(b, S.s);
-  $('cardL').innerHTML = cardHTML(sa, null);
-  $('cardR').innerHTML = cardHTML(sb, sa && sb ? sa : null);
+  $('cardL').innerHTML = cardHTML(sa, null, 'L');
+  $('cardR').innerHTML = cardHTML(sb, sa && sb ? sa : null, 'R');
+  $('cardL').classList.toggle('closed', !cardOpen.L); $('cardR').classList.toggle('closed', !cardOpen.R);
   const lab = sa || sb;
   $('segLabel').textContent = lab ? `· ${lab.seg.id}` : '· (tidak ada gambar teknis)';
   if (lab) lastDeck = lab.deck;
@@ -202,13 +210,46 @@ function buildUI() {
     const z = MODEL.zona[k]; b.title = `STA ${fmtSTA(z.sta[0])} – ${fmtSTA(z.sta[1])}`;
     b.onclick = () => loadZone(k); zs.appendChild(b);
   });
+  buildLegend();
+}
+// kelompok bagian (satu tombol = beberapa material)
+const GROUPS = [
+  { n: 'Badan Jalan', mats: ['pav', 'base', 'lfa', 'barrier', 'steel'] },
+  { n: 'Timbunan & Tanah', mats: ['fill', 'ground'] },
+  { n: 'Saluran Drainase', mats: ['channel', 'culvert', 'bore'] },
+  { n: 'Air', mats: ['water'] },
+  { n: 'Ruang Bebas Jalan (RUMIJA)', mats: ['post'] },
+  { n: 'Sawah', mats: ['sawah', 'pematang'] },
+  { n: 'Simpang', mats: ['marka', 'island', 'cdrain', 'cb', 'bk', 'mh', 'pipa'] },
+];
+const hex = c => '#' + c.toString(16).padStart(6, '0');
+function buildLegend() {
   const lg = $('legend'); lg.innerHTML = '';
+  const row = document.createElement('div'); row.className = 'chips'; lg.appendChild(row);
+  GROUPS.forEach((g, gi) => {
+    const b = document.createElement('button'); b.className = 'chip'; b.dataset.g = gi;
+    b.title = g.mats.map(m => MATS[m].n).join(' · ');
+    b.innerHTML = `<span class="sw">${g.mats.slice(0, 3).map(m => `<i style="background:${hex(MATS[m].c)}"></i>`).join('')}</span>${g.n}`;
+    b.onclick = () => { const on = !g.mats.some(m => S.vis[m]); g.mats.forEach(m => S.vis[m] = on); syncLegend(); applyPlanes(); };
+    row.appendChild(b);
+  });
+  const d = document.createElement('button'); d.className = 'chip more'; d.textContent = 'Rincian ▸'; row.appendChild(d);
+  const det = document.createElement('div'); det.className = 'detail'; det.hidden = true; lg.appendChild(det);
   ORDER.forEach(m => {
     const l = document.createElement('label');
-    l.innerHTML = `<input type="checkbox" checked><i style="background:#${MATS[m].c.toString(16).padStart(6, '0')}"></i>${MATS[m].n}`;
-    l.querySelector('input').onchange = e => { S.vis[m] = e.target.checked; applyPlanes(); };
-    lg.appendChild(l);
+    l.innerHTML = `<input type="checkbox" data-m="${m}"><i style="background:${hex(MATS[m].c)}"></i>${MATS[m].n}`;
+    l.querySelector('input').onchange = e => { S.vis[m] = e.target.checked; syncLegend(); applyPlanes(); };
+    det.appendChild(l);
   });
+  d.onclick = () => { det.hidden = !det.hidden; d.textContent = det.hidden ? 'Rincian ▸' : 'Rincian ▾'; requestAnimationFrame(() => document.documentElement.style.setProperty('--panel-h', $('panel').offsetHeight + 'px')); };
+  syncLegend();
+}
+function syncLegend() {
+  document.querySelectorAll('.chip[data-g]').forEach(b => {
+    const g = GROUPS[+b.dataset.g], n = g.mats.filter(m => S.vis[m]).length;
+    b.classList.toggle('on', n === g.mats.length); b.classList.toggle('part', n > 0 && n < g.mats.length);
+  });
+  document.querySelectorAll('.detail input').forEach(i => { i.checked = !!S.vis[i.dataset.m]; });
 }
 function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => e.classList.remove('show'), 2200); }
 
@@ -271,7 +312,7 @@ let xray = false;
 $('btnXray').onclick = e => {
   xray = !xray; e.target.classList.toggle('on', xray);
   const hide = ['ground', 'fill', 'sawah', 'pematang', 'pav'];
-  document.querySelectorAll('#legend label').forEach((l, i) => { const m = ORDER[i]; if (hide.includes(m)) { l.querySelector('input').checked = !xray; S.vis[m] = !xray; } });
+  hide.forEach(m => S.vis[m] = !xray); syncLegend();
   applyPlanes();
 };
 const panel = $('panel'), pbtn = $('btnPanel');
@@ -281,7 +322,7 @@ const setPanel = on => {
   requestAnimationFrame(() => document.documentElement.style.setProperty('--panel-h', (on ? panel.offsetHeight : 0) + 'px'));
 };
 pbtn.onclick = () => setPanel(document.body.classList.contains('nopanel'));
-addEventListener('resize', () => { if (!document.body.classList.contains('nopanel')) document.documentElement.style.setProperty('--panel-h', panel.offsetHeight + 'px'); });
+try { new ResizeObserver(() => { if (!document.body.classList.contains('nopanel')) document.documentElement.style.setProperty('--panel-h', panel.offsetHeight + 'px'); }).observe(panel); } catch (e) {}
 try { setPanel(localStorage.getItem('panel') !== '0'); } catch (e) { setPanel(true); }
 const goFull = () => { try { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => toast('Layar penuh ditolak browser. Buka link di tab sendiri lalu tekan F11.')); } catch (e) { toast('Layar penuh tidak didukung. Tekan F11.'); } };
 $('btnFull').onclick = goFull;
@@ -294,6 +335,7 @@ addEventListener('keydown', e => {
   if (e.key === 'ArrowRight') setSTA(S.s + (e.shiftKey ? 10 : 1)); else if (e.key === 'ArrowLeft') setSTA(S.s - (e.shiftKey ? 10 : 1));
   else if (e.key === 'f' || e.key === 'F') goFull();
   else if (e.key === 'h' || e.key === 'H') pbtn.click();
+  else if (e.key === 'i' || e.key === 'I') toggleCards();
   else if (e.key === ' ') { e.preventDefault(); $('play').click(); }
 });
 

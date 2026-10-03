@@ -19,7 +19,9 @@ Pilih zona (O1…O10) di atas; URL `#O5` membuka zona O5 langsung.
   Tombol ◀ ▶ lompat ke potongan gambar berikutnya; spasi = animasi; ←/→ geser 1 m (Shift = 10 m).
 - Kartu info tiap jendela: tipe saluran, elevasi Top/Dasar/Tanah/As jalan, catatan galian;
   kartu Skenario 2 menampilkan **selisih terhadap Skenario 1** (hijau = naik, merah = turun).
-- Eksagerasi vertikal 1–4×, filter material, preset kamera.
+- Eksagerasi vertikal 1–4×, preset kamera.
+- Legenda diringkas jadi 7 bagian (Badan Jalan, Timbunan & Tanah, Saluran Drainase, Air, Ruang Bebas Jalan, Sawah, Simpang); tombol **Rincian** menampilkan centang per material.
+- Tabel info di tiap jendela bisa dilipat dengan tombol ▾ (atau tekan **I**); panel bawah dengan ▾ di tengah (atau **H**).
 
 ## Cara data dibentuk (`tools/dxf_to_model.py`)
 ```bash

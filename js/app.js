@@ -14,7 +14,10 @@ const MATS = {
   channel: { c: 0x5fc2f0, n: 'Saluran (U-ditch / trapesium)' },
   culvert: { c: 0xf0883e, n: 'Siphon / box culvert / talang' },
   post:    { c: 0xe5484d, n: 'Patok RUMIJA (tiap 20 m)' },
-  water:   { c: 0x2f7fd6, n: 'Muka air banjir (O1)' },
+  water:   { c: 0x2f7fd6, n: 'Air (banjir O1 / saluran irigasi)' },
+  sawah:   { c: 0x74b04c, n: 'Sawah' },
+  pematang:{ c: 0xc9ab70, n: 'Pematang sawah' },
+  bore:    { c: 0x0b0f14, n: 'Rongga siphon / gorong-gorong' },
 };
 const ORDER = Object.keys(MATS);
 const $ = id => document.getElementById(id);
@@ -51,7 +54,7 @@ function buildView(segs) {
   const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.position.set(-40, 90, 60); scene.add(sun);
   const fill = new THREE.DirectionalLight(0x9ec8ff, 0.5); fill.position.set(50, 30, -60); scene.add(fill);
   const root = new THREE.Group(); scene.add(root);
-  const geos = buildGeometry(segs, sta0, Z.floor);
+  const geos = buildGeometry(segs, sta0, Z.floor, Z.irigasi);
   const v = { scene, root, segs, mats: {}, planes: [] };
   const cutQuad = new THREE.PlaneGeometry(6000, 6000);
   ORDER.forEach((m, mi) => {
@@ -152,6 +155,7 @@ function cardHTML(sm, ref) {
   ${row('Tipe', typ)}${row('Top (m)', k => num('top', k))}${row('Dasar (m)', k => num('bottom', k))}
   ${row('Tanah (m)', k => num('ground', k))}
   <tr><th>As jalan</th><td colspan="2">${f3(sm.deck)} m${ref ? delta(ref.deck, sm.deck) : ''}</td></tr>
+  ${sm.seg.irig ? `<tr><th>Irigasi</th><td colspan="2" style="color:#6db3ff">saluran melintang jalan: dasar ${f3(sm.seg.irig.zb)} m, lebar dasar ${sm.seg.irig.bw.toFixed(1)} m (asumsi)</td></tr>` : ''}
   ${sm.water != null ? `<tr><th>MAB banjir</th><td colspan="2" style="color:#6db3ff">${f3(sm.water)} m (selatan jalan)</td></tr>` : ''}</table>
   ${notes.length ? `<div class="muted note">${notes.join(' · ')}</div>` : ''}`;
 }

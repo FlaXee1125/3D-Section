@@ -81,18 +81,44 @@ function strip(x, tops, bots, X, out) {
   }
 }
 
+// Prisma yang diekstrusi sepanjang Z (offset): cincin dalam bidang (STA, elevasi) -> saluran irigasi melintang, pematang
+export function prismZ(rings, z0, z1, sta0, out) {
+  const pt3 = (r, k, z) => [r[2*k] - sta0, r[2*k+1], z];
+  for (const r of rings) {
+    const n = r.length / 2;
+    for (let k = 0; k < n; k++) {
+      const k2 = (k + 1) % n, dx = r[2*k2] - r[2*k], dy = r[2*k2+1] - r[2*k+1];
+      if (Math.hypot(dx, dy) < 1e-9) continue;
+      const nrm = [dy, -dx, 0];                        // keluar untuk cincin luar CCW (lubang CW)
+      const a = pt3(r, k, z0), b = pt3(r, k2, z0), c = pt3(r, k2, z1), d = pt3(r, k, z1);
+      tri(out, a, b, c, nrm); tri(out, a, c, d, nrm);
+    }
+  }
+  const v = r => { const a = []; for (let k = 0; k < r.length; k += 2) a.push(new Vector2(r[k] - sta0, r[k+1])); return a; };
+  const contour = v(rings[0]), holes = rings.slice(1).map(v);
+  let faces; try { faces = ShapeUtils.triangulateShape(contour, holes); } catch (e) { return; }
+  const all = contour.concat(...holes);
+  for (const [a, b, c] of faces) for (const [z, dir] of [[z0, -1], [z1, 1]]) {
+    const P = i => [all[i].x, all[i].y, z];
+    tri(out, P(a), P(b), P(c), [0, 0, dir]);
+  }
+}
+
 // segs: daftar segmen satu skenario; kembalikan {mat: Float32Array posisi}
-export function buildGeometry(segs, sta0, floor) {
+export function buildGeometry(segs, sta0, floor, irig) {
   const buf = {};
   const get = m => buf[m] || (buf[m] = []);
   for (const seg of segs) {
     const X = seg.sta.map(v => v - sta0);
-    const e = seg.earth;
-    strip(e.x, e.S, e.S.map(r => r.map(() => floor)), X, get('ground'));
-    strip(e.x, e.F, e.S, X, get('fill'));
+    const e = seg.earth, XE = (e.sta || seg.sta).map(v => v - sta0);
+    strip(e.x, e.P, e.S.map(r => r.map(() => floor)), XE, get('ground'));
+    strip(e.x, e.S, e.P, XE, get('sawah'));
+    strip(e.x, e.F, e.S, XE, get('fill'));
     if (seg.water) strip(e.x, seg.water.top, e.S, X, get('water'));
+    for (const z of seg.zel || []) prismZ(z.rings, z.z0, z.z1, sta0, get(z.m));
     for (const el of seg.els) {
       const out = get(el.m);
+      const XS = el.xs ? el.xs.map(v => v - sta0) : X, N = el.r.length;
       if (el.k.startsWith('post') || el.k.startsWith('gpost')) {   // tiang tersendiri: patok RUMIJA tiap 20 m, tiang guardrail tiap 2 m (kelipatan STA)
         const gp = el.k.startsWith('gpost'), sp = gp ? 2 : 20, th = gp ? 0.1 : 0.15;
         const sa = Math.min(seg.sta[0], seg.sta[2]), sb = Math.max(seg.sta[0], seg.sta[2]);
@@ -103,17 +129,18 @@ export function buildGeometry(segs, sta0, floor) {
         continue;
       }
       let i = 0;
-      while (i < 3) {
+      while (i < N) {
         if (!el.r[i]) { i++; continue; }
-        let j = i; while (j + 1 < 3 && el.r[j+1]) j++;
+        let j = i; while (j + 1 < N && el.r[j+1]) j++;
         if (j === i) {
-          const a = i > 0 ? (X[i-1] + X[i]) / 2 : X[i], b = i < 2 ? (X[i] + X[i+1]) / 2 : X[i];
+          const a = i > 0 ? (XS[i-1] + XS[i]) / 2 : XS[i], b = i < N - 1 ? (XS[i] + XS[i+1]) / 2 : XS[i];
           if (b > a) prism(el.r[i], a, b, out);
-        } else loftChain(el.r.slice(i, j + 1), X.slice(i, j + 1), out);
+        } else loftChain(el.r.slice(i, j + 1), XS.slice(i, j + 1), out);
         i = j + 1;
       }
     }
   }
+  for (const z of (irig && irig.zel) || []) prismZ(z.rings, z.z0, z.z1, sta0, get(z.m));
   const res = {};
   for (const m in buf) res[m] = new Float32Array(buf[m]);
   return res;

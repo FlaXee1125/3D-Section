@@ -37,3 +37,6 @@ data (`data/model.json`). Lihat `README.md`.
 ## 7. Guardrail & skala
 - Guardrail: balok W-beam menerus + tiang tiap 2 m (acuan jarak tiang maks. 2 m; belum terverifikasi ke teks pasal karena situs sumber diblokir).
 - Gambar DXF skalatis 1:1 (lebar U-ditch cocok label hingga 1 mm).
+
+## 8. Siphon revisi, irigasi, sawah
+- Saluran 17 / Bagian 2 Skenario 2 dimodelkan siphon; ditambah saluran irigasi melintang di lokasi siphon/talang; sawah di kanan-kiri jalan.

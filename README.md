@@ -35,6 +35,15 @@ python3 tools/dxf_to_model.py data/source/3d-Modeling.dxf data/model.json
   saluran (`CHANNEL1/2`: U-ditch & trapesium), bangunan (`BUILDING`: siphon, box culvert, talang),
   dan patok RUMIJA (`APJ`).
 
+## Saluran irigasi melintang, siphon revisi, sawah
+- Di setiap lokasi **Siphon / Talang** (O5, O6, O7, O8, O9) ditambahkan **saluran irigasi melintang jalan**: terbuka di luar badan jalan
+  (|offset| > 12,8 m, memotong timbunan dan berm) dan lewat **gorong-gorong box di bawah jalan**. Talang melintas di atas, siphon di bawahnya.
+  Dimensi (asumsi): kedalaman 1,2 m dari muka tanah (lebih dangkal bila siphon dangkal), lebar atas ≈ 0,7 × panjang talang/siphon (2,5–8 m), talud 1:1,
+  gorong-gorong bersih 1,0 m; air setinggi 70 % kedalaman.
+- **Revisi Saluran 17 / Bagian 2 – Skenario 2** (STA 9+942,90 – 9+949,90): saluran U-ditch/trapesium diganti **siphon box 0,8 × 0,95 m (dinding 20 cm)**
+  yang turun di bawah dasar saluran irigasi (kemiringan kaki ±37°) lalu naik lagi; rongga digambar gelap.
+- **Sawah** (hijau) di kanan-kiri jalan di luar kaki timbunan, dengan **pematang** sejajar jalan (tiap 9 m offset) dan pematang melintang tiap 25 m STA.
+
 ## Asumsi / batasan
 - Alinyemen dianggap **lurus** (gambar tidak memuat koordinat peta); antar potongan **interpolasi linear**.
 - Siphon & talang hanya digambar sebagai persegi dimensi bersih → diberi dinding beton **asumsi 0,20 m**.

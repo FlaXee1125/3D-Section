@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D Section View – Bangunan Air</title>
+<style>
+  :root { --bg:#0f1720; --panel:#17212c; --fg:#e6edf3; --muted:#8b98a5; --acc:#38bdf8; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:14px system-ui,sans-serif; overflow:hidden; }
+  #app { position:fixed; inset:0; }
+  #ui { position:fixed; top:12px; left:12px; width:250px; background:var(--panel); border:1px solid #2a3947;
+        border-radius:10px; padding:12px 14px; box-shadow:0 4px 18px #0006; max-height:calc(100% - 24px); overflow:auto; }
+  h1 { font-size:15px; margin:0 0 8px; }
+  fieldset { border:0; padding:0; margin:0 0 10px; }
+  legend { color:var(--muted); font-size:12px; margin-bottom:4px; }
+  label { display:flex; align-items:center; gap:6px; margin:3px 0; }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  .row { display:flex; justify-content:space-between; color:var(--muted); font-size:12px; }
+  button { background:#223344; color:var(--fg); border:1px solid #2f4357; border-radius:6px; padding:5px 9px; cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; }
+  #hint { color:var(--muted); font-size:11px; margin-top:8px; line-height:1.4; }
+  @media (max-width:600px){ #ui{ width:auto; right:12px; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+</head>
+<body>
+<div id="app"></div>
+<div id="ui">
+  <h1>3D Section – Bendung &amp; Tanggul</h1>
+  <fieldset>
+    <legend>Bidang potong</legend>
+    <label><input type="radio" name="axis" value="x" checked> Memanjang (X)</label>
+    <label><input type="radio" name="axis" value="z"> Melintang (Z)</label>
+    <label><input type="radio" name="axis" value="y"> Denah / horizontal (Y)</label>
+    <label><input type="checkbox" id="flip"> Balik arah potong</label>
+    <label><input type="checkbox" id="enable" checked> Aktifkan potongan</label>
+  </fieldset>
+  <fieldset>
+    <legend>Posisi potongan</legend>
+    <input type="range" id="pos" min="0" max="1" step="0.001" value="0.5">
+    <div class="row"><span id="posLabel"></span><button id="anim">▶ Animasi</button></div>
+  </fieldset>
+  <fieldset>
+    <legend>Tampilan</legend>
+    <label><input type="checkbox" id="water" checked> Tampilkan air</label>
+    <label><input type="checkbox" id="wire"> Wireframe</label>
+    <label><input type="checkbox" id="grid" checked> Grid &amp; sumbu</label>
+    <button id="reset">Reset kamera</button>
+  </fieldset>
+  <div class="legend">
+    <div><i style="background:#8d6e4a"></i>Tanah dasar</div>
+    <div><i style="background:#b08a5a"></i>Tubuh tanggul</div>
+    <div><i style="background:#9aa5b1"></i>Beton (mercu/kolam olak)</div>
+    <div><i style="background:#2b8bd6"></i>Air</div>
+  </div>
+  <div id="hint">Drag: putar · Scroll: zoom · Klik kanan: geser. Satuan model: meter.</div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias:true });
+renderer.setPixelRatio(devicePixelRatio);
+renderer.setSize(innerWidth, innerHeight);
+renderer.localClippingEnabled = true;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0f1720);
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 1000);
+const HOME = new THREE.Vector3(55, 38, 60);
+camera.position.copy(HOME);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 4, 0);
+controls.enableDamping = true;
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0x334455, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+sun.position.set(30, 60, 40);
+scene.add(sun);
+
+// ---- Model (satuan m). X = sepanjang sungai/aliran, Y = elevasi, Z = lebar (sumbu tanggul)
+const W = 40;  // lebar total sepanjang sumbu (Z)
+function boxMesh(w,h,d,x,y,z){ const g=new THREE.BoxGeometry(w,h,d); g.translate(x,y,z); return g; }
+function prism(points, depth){ // profil (x,y) diekstrusi sepanjang Z, terpusat
+  const s = new THREE.Shape(points.map(p=>new THREE.Vector2(p[0],p[1])));
+  const g = new THREE.ExtrudeGeometry(s,{depth,bevelEnabled:false});
+  g.translate(0,0,-depth/2); return g;
+}
+
+const parts = [
+  { name:'tanah', color:0x8d6e4a, geo: boxMesh(70,6,W+10, 0,-3,0) },
+  { name:'tanggul', color:0xb08a5a, geo: prism([[-14,0],[14,0],[6,9],[-6,9]], W) },
+  { name:'beton', color:0x9aa5b1, geo: prism([[16,0],[16,2.2],[20,1.2],[34,0.3],[34,0],[16,0]], W-8) },
+  { name:'beton', color:0x9aa5b1, geo: boxMesh(4,6,W-8, -2,3,0) }, // mercu tegak di atas tubuh (tembok hulu)
+];
+// Air hulu dan hilir (dipotong ketinggian muka air)
+const waters = [
+  { name:'air', color:0x2b8bd6, geo: boxMesh(26,7,W+10, -27,3.5,0), opacity:0.55 }, // hulu
+  { name:'air', color:0x2b8bd6, geo: boxMesh(30,1.2,W+10, 34-15+13,0.6,0), opacity:0.55 }, // hilir
+];
+// Hapus mercu tegak agar tidak tumpang tindih dengan tubuh tanggul
+parts.pop();
+
+// ---- Clipping planes + stencil cap
+const plane = new THREE.Plane(new THREE.Vector3(-1,0,0), 0);
+const planes = [plane];
+const bounds = new THREE.Box3(new THREE.Vector3(-35,-6,-25), new THREE.Vector3(40,12,25));
+const group = new THREE.Group(); scene.add(group);
+const capGroup = new THREE.Group(); scene.add(capGroup);
+const meshes = [];
+const capMeshes = [];
+
+function addPart(p, i, isWater){
+  const baseMat = new THREE.MeshStandardMaterial({
+    color:p.color, side:THREE.DoubleSide, clippingPlanes:planes, clipShadows:true,
+    transparent:!!p.opacity, opacity:p.opacity||1, roughness:0.85, metalness:0.05,
+    depthWrite: !p.opacity
+  });
+  const mesh = new THREE.Mesh(p.geo, baseMat);
+  mesh.renderOrder = 100 + i; mesh.userData.water = !!isWater;
+  group.add(mesh); meshes.push(mesh);
+
+  // stencil: sisi belakang +1, sisi depan -1 pada geometri tertutup
+  const mk = (side, op)=> new THREE.MeshBasicMaterial({
+    side, depthWrite:false, depthTest:false, colorWrite:false, stencilWrite:true, stencilFunc:THREE.AlwaysStencilFunc,
+    clippingPlanes:planes, stencilFail:op, stencilZFail:op, stencilZPass:op });
+  const back = new THREE.Mesh(p.geo, mk(THREE.BackSide, THREE.IncrementWrapStencilOp));
+  const front = new THREE.Mesh(p.geo, mk(THREE.FrontSide, THREE.DecrementWrapStencilOp));
+  const grp = new THREE.Group(); grp.userData.water = !!isWater;
+  back.renderOrder = front.renderOrder = i*2+1;
+
+  const capMat = new THREE.MeshStandardMaterial({
+    color:p.color, roughness:0.9, emissive:p.color, emissiveIntensity:0.25,
+    stencilWrite:true, stencilRef:0, stencilFunc:THREE.NotEqualStencilFunc,
+    stencilFail:THREE.ReplaceStencilOp, stencilZFail:THREE.ReplaceStencilOp, stencilZPass:THREE.ReplaceStencilOp,
+    transparent:!!p.opacity, opacity:p.opacity||1 });
+  const cap = new THREE.Mesh(new THREE.PlaneGeometry(400,400), capMat);
+  cap.renderOrder = i*2+2;
+  cap.onAfterRender = r => r.clearStencil();
+  grp.add(back, front); capGroup.add(grp); capMeshes.push({grp, cap});
+  scene.add(cap);
+}
+parts.forEach((p,i)=>addPart(p,i,false));
+waters.forEach((p,i)=>addPart(p,parts.length+i,true));
+// outline tepi bidang potong
+const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(1,1)),
+  new THREE.LineBasicMaterial({color:0x38bdf8}));
+scene.add(frame);
+
+const grid = new THREE.GridHelper(120, 24, 0x3a4a5a, 0x24313e); grid.position.y = -6.01; scene.add(grid);
+const axes = new THREE.AxesHelper(20); axes.position.set(-35,-6,-25); scene.add(axes);
+
+// ---- UI
+const $ = id => document.getElementById(id);
+let axis = 'x';
+const normals = { x:new THREE.Vector3(1,0,0), y:new THREE.Vector3(0,1,0), z:new THREE.Vector3(0,0,1) };
+function updateCut(){
+  const sign = $('flip').checked ? -1 : 1;
+  const lo = bounds.min[axis], hi = bounds.max[axis];
+  const pos = lo + (hi-lo)*parseFloat($('pos').value);
+  const n = normals[axis].clone().multiplyScalar(-sign);   // bagian yang dibuang
+  plane.normal.copy(n); plane.constant = sign*pos;
+  const on = $('enable').checked;
+  planes.length = 0; if(on) planes.push(plane);
+  [...meshes].forEach(m=>{ m.material.clippingPlanes = on?planes:[]; m.material.needsUpdate = true; });
+  capMeshes.forEach(({grp,cap})=>{
+    grp.visible = cap.visible = on;
+    grp.children.forEach(c=>c.material.clippingPlanes = planes);
+    // letakkan bidang cap tepat di bidang potong
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1), n.clone().negate());
+    cap.quaternion.copy(q);
+    const p0 = new THREE.Vector3(); plane.coplanarPoint(p0); cap.position.copy(p0);
+    cap.material.clippingPlanes = [];
+    grp.visible = on && (!grp.userData.water || $('water').checked);
+    cap.visible = grp.visible;
+  });
+  const size = new THREE.Vector3(); bounds.getSize(size);
+  frame.visible = on;
+  frame.quaternion.copy(capMeshes[0].cap.quaternion); frame.position.copy(capMeshes[0].cap.position);
+  const s = {x:[size.z,size.y], y:[size.x,size.z], z:[size.x,size.y]}[axis];
+  frame.scale.set(s[0], s[1], 1);
+  const names = {x:'X',y:'Y (elevasi)',z:'Z'};
+  $('posLabel').textContent = `${names[axis]} = ${pos.toFixed(1)} m`;
+}
+document.querySelectorAll('input[name=axis]').forEach(r=>r.onchange=()=>{axis=r.value; updateCut();});
+['pos','flip','enable'].forEach(id=>$(id).oninput=updateCut);
+$('water').onchange = ()=>{ meshes.forEach(m=>{ if(m.userData.water) m.visible=$('water').checked; }); updateCut(); };
+$('wire').onchange = ()=>meshes.forEach(m=>m.material.wireframe=$('wire').checked);
+$('grid').onchange = ()=>{ grid.visible = axes.visible = $('grid').checked; };
+$('reset').onclick = ()=>{ camera.position.copy(HOME); controls.target.set(0,4,0); };
+let animating=false, t=0;
+$('anim').onclick = ()=>{ animating=!animating; $('anim').textContent = animating?'⏸ Stop':'▶ Animasi'; };
+
+addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+updateCut();
+renderer.setAnimationLoop(()=>{
+  if(animating){ t+=0.004; $('pos').value = 0.5+0.5*Math.sin(t); updateCut(); }
+  controls.update(); renderer.render(scene,camera);
+});
+</script>
+</body>
+</html>

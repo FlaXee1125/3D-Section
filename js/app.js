@@ -20,6 +20,8 @@ const MATS = {
   bore:    { c: 0x0b0f14, n: 'Rongga siphon / gorong-gorong' },
   marka:   { c: 0xf4f4f0, n: 'Marka jalan (zebra, stop, chevron, garis)' },
   island:  { c: 0xc3c8cd, n: 'Pulau berkerb' },
+  cross:   { c: 0xd8b36a, n: 'Gorong-gorong kawasan (cross drain)' },
+  castiron:{ c: 0x4a525c, n: 'Tutup manhole besi cor' },
   cdrain:  { c: 0x2b3038, n: 'Catch drain (selokan pulau simpang)' },
   cb:      { c: 0xd9372f, n: 'Catch basin 60×60 cm' },
   bk:      { c: 0xb98bd9, n: 'Bak kontrol 110×110 cm' },
@@ -215,6 +217,7 @@ function buildStructures() {
       const m = s.match(/^(Simpang \d+) @ ([\d.]+)/); if (!m) continue;
       list.push({ O, sta: +m[2], grp: 'Simpang', label: `${O} · ${m[1]} · STA ${fmtSTA(+m[2])}` });
     }
+    for (const c of z.crossdrain || []) list.push({ O, sta: c.sta, grp: 'Gorong-gorong kawasan (cross drain)', label: `${O} · CD-${c.num} · STA ${fmtSTA(c.sta)}` });
     const simpangSta = z.irigasi.simpang.map(s => +s.split('@')[1]);
     const runs = [];
     for (const g of z.skenario['1'] || []) {
@@ -231,7 +234,7 @@ function buildStructures() {
 }
 function buildGoto() {
   const sel = $('goto'); const items = buildStructures();
-  for (const grp of ['Simpang', 'Siphon / talang di saluran irigasi', 'Box culvert drainase']) {
+  for (const grp of ['Simpang', 'Siphon / talang di saluran irigasi', 'Gorong-gorong kawasan (cross drain)', 'Box culvert drainase']) {
     const og = document.createElement('optgroup'); og.label = grp;
     items.filter(i => i.grp === grp).forEach(i => { const o = document.createElement('option'); o.value = JSON.stringify([i.O, i.sta]); o.textContent = i.label; og.appendChild(o); });
     if (og.children.length) sel.appendChild(og);
@@ -263,6 +266,7 @@ const GROUPS = [
   { n: 'Air', mats: ['water'] },
   { n: 'Ruang Bebas Jalan (RUMIJA)', mats: ['post'] },
   { n: 'Sawah', mats: ['sawah', 'pematang'] },
+  { n: 'Gorong-gorong Kawasan', mats: ['cross', 'castiron'] },
   { n: 'Simpang', mats: ['marka', 'island', 'cdrain', 'cb', 'bk', 'mh', 'pipa'] },
 ];
 const hex = c => '#' + c.toString(16).padStart(6, '0');
@@ -317,7 +321,7 @@ function loadZone(k) {
   document.querySelectorAll('#zones button').forEach(b => b.classList.toggle('on', b.dataset.z === k));
   for (const v of views) if (v) { v.scene.traverse(o => { if (o.geometry && o.geometry.dispose) o.geometry.dispose(); }); }
   views = [buildView(Z.skenario['1'] || []), buildView(Z.skenario['2'] || [])];
-  drawTimeline();
+  drawTimeline(); buildTags();
   const first = Z.skenario['1'][0]; S.s = first.sta[1];
   const lv = $('lv'); lv.min = Z.floor; lv.max = Z.floor + 22; S.lv = first.deck[1] - 0.2; lv.value = S.lv;
   $('sta').value = S.s; lastDeck = first.deck[1];
@@ -396,6 +400,33 @@ function updateLabels(w, h) {
   });
 }
 
+// ---------- label nama bangunan (3D)
+let tagEls = [];
+S.tags = true;
+function buildTags() {
+  tagEls.forEach(t => t.el.remove()); tagEls = [];
+  for (const tg of (Z.tags || [])) for (const vp of [0, 1]) {
+    if (tg.sk !== 0 && tg.sk !== vp + 1) continue;
+    const el = document.createElement('div'); el.className = 'tg ' + tg.kind; el.textContent = tg.text; $('labels').appendChild(el);
+    tagEls.push({ el, tg, vp });
+  }
+}
+const tpos = new THREE.Vector3();
+function updateTags(w, h) {
+  for (const { el, tg, vp } of tagEls) {
+    if (!S.tags) { el.style.display = 'none'; continue; }
+    const cam = vp ? camR : camL;
+    tpos.set(tg.sta - sta0, tg.y * S.ve, tg.z);
+    const dist = cam.position.distanceTo(tpos);
+    tpos.project(cam);
+    const vis = tpos.z < 1 && Math.abs(tpos.x) < 1.0 && Math.abs(tpos.y) < 1.0 && dist < 190;
+    el.style.display = vis ? '' : 'none'; if (!vis) continue;
+    el.style.left = ((tpos.x * 0.5 + 0.5) * (w / 2) + vp * w / 2) + 'px'; el.style.top = ((-tpos.y * 0.5 + 0.5) * h) + 'px';
+    el.style.opacity = Math.max(0.35, Math.min(1, 1.2 - dist / 190));
+  }
+}
+$('btnTags').onclick = e => { S.tags = !S.tags; e.target.classList.toggle('on', S.tags); };
+
 // ---------- loop render
 let last = performance.now();
 function frame(now) {
@@ -413,7 +444,7 @@ function frame(now) {
     renderer.setViewport(i * w / 2, 0, w / 2, h); renderer.setScissor(i * w / 2, 0, w / 2, h);
     renderer.render(views[i].scene, cam);
   });
-  updateLabels(w, h);
+  updateLabels(w, h); updateTags(w, h);
   requestAnimationFrame(frame);
 }
 

@@ -47,3 +47,6 @@ data (`data/model.json`). Lihat `README.md`.
 
 ## 10. Simpang plek PDF, saluran tidak tertimbun, panel lipat
 - Bentuk, marka, pulau, drainase simpang dari vektor PDF; saluran terbuka dilindungi dari lereng simpang; panel kontrol bisa dilipat.
+
+## 11. Gorong-gorong kawasan dan label 3D
+- Gorong-gorong irigasi: kepala masuk ke dalam, talang/siphon di luar kepala; gorong-gorong kawasan (cross drain) 0,5×0,5 m hanya Skenario 1 di 19 STA daftar pengguna (tipikal `TIPIKAL_GORONG_GORONG.dxf`); label nama bangunan 3D.

@@ -21,7 +21,7 @@ Pilih zona (O1…O10) di atas; URL `#O5` membuka zona O5 langsung.
   kartu Skenario 2 menampilkan **selisih terhadap Skenario 1** (hijau = naik, merah = turun).
 - Eksagerasi vertikal 1–4×, preset kamera.
 - Menu **Lompat ke bangunan…** (kanan atas) langsung membawa ke Simpang, siphon/talang di saluran irigasi, atau box culvert drainase; zona dan STA berpindah otomatis.
-- Legenda diringkas jadi 7 bagian (Badan Jalan, Timbunan & Tanah, Saluran Drainase, Air, Ruang Bebas Jalan, Sawah, Simpang); tombol **Rincian** menampilkan centang per material.
+- Legenda diringkas jadi 8 bagian (Badan Jalan, Timbunan & Tanah, Saluran Drainase, Air, Ruang Bebas Jalan, Sawah, Gorong-gorong Kawasan, Simpang); tombol **Rincian** menampilkan centang per material.
 - Tabel info di tiap jendela bisa dilipat dengan tombol ▾ (atau tekan **I**); panel bawah dengan ▾ di tengah (atau **H**).
 
 ## Cara data dibentuk (`tools/dxf_to_model.py`)
@@ -81,3 +81,10 @@ python3 tools/dxf_to_model.py data/source/3d-Modeling.dxf data/model.json
   sama untuk kedua skenario; sisi utara kering; air berada di luar timbunan (tidak mengisi saluran).
 - Air di dalam saluran tidak dimodelkan.
 - Jangkauan offset dimodelkan ±36 m dari as jalan.
+
+## Gorong-gorong kawasan (cross drain) dan label 3D
+- 19 titik (CD-1…CD-19, daftar STA/elevasi dari pengguna), **hanya Skenario 1**, box 0,5×0,5 m (dinding 15 cm) melintang di bawah jalan, bentuk mengacu `data/source/TIPIKAL_GORONG_GORONG.dxf`
+  (kepala di kaki timbunan, sayap 30°, manhole besi cor). Elevasi diperlakukan sebagai acuan dasar dan diturunkan 0,2 m; dasar dijaga ≥ 0,3 m di bawah dasar saluran tepi
+  supaya saluran tidak terpengaruh, dan maks. 1,2 m di bawah tanah. CD di luar cakupan DXF (STA 17883,9) dan di celah STA tanpa gambar tidak digambar.
+- Gorong-gorong irigasi: kepala ditarik ke dalam (dekat jalan) dengan dinding penahan, talang/siphon berada di luar kepala di atas saluran terbuka.
+- Tombol **🏷 Label** menampilkan nama bangunan (cross drain, gorong-gorong irigasi, talang/siphon, simpang) sebagai label 3D di tiap jendela.

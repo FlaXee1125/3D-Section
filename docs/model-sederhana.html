@@ -40,7 +40,7 @@ select{font:inherit;font-size:13px;color:var(--fg);background:#17222e;border:1px
   <div class="tools">
     <button id="bX" title="Tanah dibuat tembus pandang">Tembus tanah</button>
     <button id="bL" class="on">Label</button>
-    <button data-cam="iso">Isometrik</button><button data-cam="top">Atas</button><button data-cam="side">Samping</button>
+    <button data-cam="detail">Detail</button><button data-cam="iso">Isometrik</button><button data-cam="top">Atas</button><button data-cam="side">Samping</button>
   </div>
 </header>
 <main>
@@ -116,7 +116,7 @@ function earth(cutFn) {
     const x0 = -P.X + i * c, x1 = x0 + c, z0 = -P.Z + j * c, z1 = z0 + c, cut = cutAt(i, j);
     const hh = x => cut !== null && cut !== undefined ? cut : hAt(x), h0 = hh(x0), h1 = hh(x1);
     quad([x0, h0, z0], [x1, h1, z0], [x1, h1, z1], [x0, h0, z1]);
-    const xm = (x0 + x1) / 2; clr(...(cut !== null && cut !== undefined ? CU : (hAt(xm) > 0.02 ? FL : GR)));
+    const xm = (x0 + x1) / 2; clr(...(cut === 0 ? GR : cut !== null && cut !== undefined ? CU : (hAt(xm) > 0.02 ? FL : GR)));
     const nb = [[i - 1, j, 'x0'], [i + 1, j, 'x1'], [i, j - 1, 'z0'], [i, j + 1, 'z1']];
     for (const [ni, nj, side] of nb) {
       const ncut = cutAt(ni, nj), mine = cut !== null && cut !== undefined, out = ncut === undefined, theirs = !out && ncut !== null;
@@ -215,7 +215,8 @@ const TRAPS = [
   { n: 'Trapesium sedang · b 1,0 · H 1,2 · 1:0,5', b: 1.0, H: 1.2, zs: 0.5 },
   { n: 'Trapesium besar · b 1,0 · H 1,5 · 1:0,5', b: 1.0, H: 1.5, zs: 0.5 },
   { n: 'Saluran U / kotak (tanpa transisi)', box: true }];
-const ST = { trap: 1 };
+const SLOPES = [{ n: '1 : 1 (45°)', k: 1 }, { n: '1 : 0,75 (53°)', k: 0.75 }, { n: '1 : 1,5 (34°)', k: 1.5 }];
+const ST = { trap: 1, slope: 0 };
 const trLen = r => Math.min(5, Math.max(2, 2.5 * (r.top - 1.0)));      // panjang transisi 2–5 m menurut lebar atas trapesium
 const SCENES = {
   irig: { tab: 'Gorong-gorong irigasi · tanpa talang', build() {
@@ -236,7 +237,7 @@ const SCENES = {
       order: ['Saluran irigasi terbuka', 'Dinding penahan sejajar lereng 1:2, <b>menjadi tumpuan talang</b>', 'Talang (saluran drainase kotak) melintas di atas saluran irigasi, setinggi saluran drainase', 'Kepala gorong-gorong <b>lebih ke dalam</b> (dekat jalan)', 'Timbunan'],
       dims: [['Kepala dari as jalan', '11,0'], ['Talang (luar)', '1,0 × 1,0'], ['Bentang talang (antar tumpuan)', '4,4'], ['Lebar saluran irigasi', '4,0'], ['Dasar talang = dasar saluran drainase', '1,0 di atas tanah dasar']] }) },
   siphon: { tab: 'Siphon (Skenario 2)', build() {
-    const xh = 11.0, hf = P.bw / 2 + P.wallT, low = P.bed - 0.3 - 1.0, drop = (P.yb - 1.0) - low, ramp = 1.5 * drop, rs = hf + ramp, sel = TRAPS[ST.trap];
+    const xh = 11.0, hf = P.bw / 2 + P.wallT, low = P.bed - 0.3 - 1.0, drop = (P.yb - 1.0) - low, ramp = SLOPES[ST.slope].k * drop, rs = hf + ramp, sel = TRAPS[ST.trap];
     const R = sel.box ? BOX : RING.trap(sel.b, sel.H, sel.zs), L = sel.box ? 0 : trLen(R), zT = rs + 10;
     if (sel.box) { chanSeg(-P.Z, -rs, BOX, BOX, MATS.ditch); chanSeg(rs, P.Z, BOX, BOX, MATS.ditch); }
     else {                                                              // trapesium | transisi (mulai 10 m sebelum siphon) | kotak terbuka | siphon
@@ -252,29 +253,31 @@ const SCENES = {
     info: () => { const sel = TRAPS[ST.trap], R = sel.box ? null : RING.trap(sel.b, sel.H, sel.zs), L = sel.box ? 0 : trLen(R);
       return { title: 'Skenario 2 · siphon di bawah saluran irigasi', sub: 'Berlaku di O5 (8+339,85), O6 (9+942,90), O7 (11+625,23), O8 (14+064,93), O9 (14+714,76).', ctl: 'chSel',
       order: sel.box ? ['Saluran kotak tertanam di berm', 'Box siphon <b>turun</b> sebelum saluran irigasi', 'Mendatar di bawah dasar saluran irigasi', 'Box <b>naik</b> setelah saluran irigasi', 'Saluran kotak kembali'] :
-        ['Saluran trapesium (tertanam di timbunan)', `<b>Transisi ${L.toFixed(1).replace('.', ',')} m</b> trapesium → kotak, dimulai 10 m sebelum siphon`, `Saluran kotak terbuka ${(10 - L).toFixed(1).replace('.', ',')} m`, 'Box siphon <b>turun</b> sebelum saluran irigasi (ramp pendek)', 'Mendatar di bawah dasar saluran irigasi (atap box 0,3 di bawahnya)', 'Naik setelah saluran irigasi, lalu urutan sama dibalik'],
-      dims: [['Box siphon / saluran kotak (luar)', '1,0 × 1,0'], ['Dinding box', '0,25'], ['Kemiringan turun / naik', '1 : 1,5 (ramp 4,2)'], ['Siphon masuk dari tepi saluran', '6,4 sebelum as'], ['Atap box di bawah dasar saluran', '0,3'], ...(sel.box ? [] : [['Lebar atas trapesium (dalam)', R.top.toFixed(2).replace('.', ',')], ['Panjang transisi (2,5 × (lebar atas − 1,0), 2–5)', L.toFixed(2).replace('.', ',')], ['Awal transisi sebelum siphon', '10,0']])] }; } },
+        ['Saluran trapesium (tertanam di timbunan)', `<b>Transisi ${L.toFixed(1).replace('.', ',')} m</b> trapesium → kotak, dimulai 10 m sebelum siphon`, `Saluran kotak terbuka ${(10 - L).toFixed(1).replace('.', ',')} m`, 'Box siphon <b>turun curam</b> tepat sebelum saluran irigasi', 'Mendatar di bawah dasar saluran irigasi (atap box 0,3 di bawahnya)', 'Naik setelah saluran irigasi, lalu urutan sama dibalik'],
+      dims: [['Box siphon / saluran kotak (luar)', '1,0 × 1,0'], ['Dinding box', '0,25'], ['Kemiringan turun / naik (curam)', SLOPES[ST.slope].n], ['Panjang ramp (dari tepi saluran irigasi)', (SLOPES[ST.slope].k * 2.8).toFixed(1).replace('.', ',')], ['Atap box di bawah dasar saluran', '0,3'], ...(sel.box ? [] : [['Lebar atas trapesium (dalam)', R.top.toFixed(2).replace('.', ',')], ['Panjang transisi (2,5 × (lebar atas − 1,0), 2–5)', L.toFixed(2).replace('.', ',')], ['Awal transisi sebelum siphon', '10,0']])] }; } },
   cross: { tab: 'Gorong-gorong kawasan (cross drain)', build() {
-    const inner = 0.5, wt = 0.15, ho = inner / 2 + wt, yIn = -0.3, yb0 = yIn - wt, yTop = yIn + inner + wt, xhead = P.xt - 0.75, xend = P.xt + 0.5;
+    const inner = 0.5, wt = 0.15, ho = inner / 2 + wt, yb0 = 0, yIn = wt, yTop = yIn + inner + wt, xhead = P.xt - 2 * 0.9, tan30 = Math.tan(Math.PI / 6), hw0 = 0.9;
     chanSeg(-P.Z, P.Z, BOX, BOX, MATS.ditch);
-    earth(cutBoth((x, z) => (Math.abs(x) >= xhead && Math.abs(z) <= Math.min(1.65, ho + (Math.abs(x) - xhead) * 0.577)) ? yIn : null)); road(); drawChannels();
-    box(-(xhead - 0.3), xhead - 0.3, yb0, yIn, -ho, ho, MATS.cross); box(-(xhead - 0.3), xhead - 0.3, yIn, yTop - wt, ho - wt, ho, MATS.cross); box(-(xhead - 0.3), xhead - 0.3, yIn, yTop - wt, -ho, -ho + wt, MATS.cross); box(-(xhead - 0.3), xhead - 0.3, yTop - wt, yTop, -ho, ho, MATS.cross);
-    box(-(xhead - 0.3), xhead - 0.3, yIn, yIn + 0.2, -inner / 2, inner / 2, MATS.water);
-    const topAt = x => Math.max(hAt(x), 0.12), N = 6, tan30 = Math.tan(Math.PI / 6);
+    // area di antara sayap (kepala sampai kaki timbunan) bebas tanah: muka tanah dasar
+    earth(cutBoth((x, z) => (Math.abs(x) >= xhead - 1e-6 && Math.abs(z) <= hw0 + (Math.abs(x) - xhead) * tan30) ? 0 : null)); road(); drawChannels();
+    const X = xhead - 0.3;
+    box(-X, X, yb0, yIn, -ho, ho, MATS.cross); box(-X, X, yIn, yTop - wt, ho - wt, ho, MATS.cross); box(-X, X, yIn, yTop - wt, -ho, -ho + wt, MATS.cross); box(-X, X, yTop - wt, yTop, -ho, ho, MATS.cross);
+    box(-X, X, yIn, yIn + 0.2, -inner / 2, inner / 2, MATS.water);
+    const N = 8;
     for (const s of [-1, 1]) {
-      const x0 = s * (xhead - 0.3), x1 = s * xhead, yH = hAt(xhead) + 0.05;
-      box(x0, x1, yb0, yIn, -0.9, 0.9, MATS.conc); box(x0, x1, yIn, yH, inner / 2, 0.9, MATS.conc); box(x0, x1, yIn, yH, -0.9, -inner / 2, MATS.conc); box(x0, x1, yIn + inner, yH, -inner / 2, inner / 2, MATS.conc);
-      for (const zs of [-1, 1]) for (let n = 0; n < N; n++) {                 // sayap 30°, tinggi atas mengikuti lereng timbunan sampai timbunan selesai
-        const xa = xhead + (xend - xhead) * n / N, xb = xhead + (xend - xhead) * (n + 1) / N;
-        skewWall([s * xa, zs * (0.9 + (xa - xhead) * tan30)], [s * xb, zs * (0.9 + (xb - xhead) * tan30)], 0.2, yb0, topAt(xa), topAt(xb), MATS.wing);
+      const x0 = s * (xhead - 0.3), x1 = s * xhead, yH = hAt(xhead);
+      box(x0, x1, yb0, yIn, -hw0, hw0, MATS.conc); box(x0, x1, yIn, yH, inner / 2, hw0, MATS.conc); box(x0, x1, yIn, yH, -hw0, -inner / 2, MATS.conc); box(x0, x1, yIn + inner, yH, -inner / 2, inner / 2, MATS.conc);
+      for (const zs of [-1, 1]) for (let n = 0; n < N; n++) {                 // sayap 30°: tinggi atas mengikuti lereng, berakhir persis di kaki timbunan
+        const xa = xhead + (P.xt - xhead) * n / N, xb = xhead + (P.xt - xhead) * (n + 1) / N;
+        skewWall([s * xa, zs * (hw0 + (xa - xhead) * tan30)], [s * xb, zs * (hw0 + (xb - xhead) * tan30)], 0.2, yb0, hAt(xa), hAt(xb), MATS.wing);
       }
       const mx = s * 2.4; box(mx - 0.55, mx + 0.55, yTop, P.Hc, -0.55, 0.55, MATS.conc); box(mx - 0.3, mx + 0.3, P.Hc, P.Hc + 0.06, -0.3, 0.3, MATS.iron);
     }
-    label('Kepala gorong-gorong di kaki timbunan', xhead, 0.9, -1.4, 'conc'); label('Sayap 30° mengikuti lereng sampai timbunan selesai', xend, 0.5, 2.2, 'conc'); label('Box 0,5 × 0,5 melintang jalan', 8, 0.7, 0, 'cross'); label('Manhole (tutup besi cor)', 2.4, 2.8, 0.9, 'iron');
+    label('Kepala gorong-gorong', xhead, 1.2, -1.3, 'conc'); label('Sayap 30°: ujungnya = ujung timbunan', P.xt, 0.6, 2.4, 'conc'); label('Area di antara sayap bebas tanah', P.xt - 0.8, 0.1, 0, 'ditch'); label('Box 0,5 × 0,5 di atas tanah dasar', 8, 1.0, 0, 'cross'); label('Manhole (tutup besi cor)', 2.4, 2.8, 0.9, 'iron');
     label('Saluran drainase jalan tertanam di berm, tidak terganggu', P.xc, 2.2, -8, 'ditch'); label('Timbunan lereng 1:2', 11, 2.1, 7); },
     info: () => ({ title: 'Gorong-gorong kawasan · Skenario 1', sub: 'Tipikal TIPIKAL_GORONG_GORONG.dxf: box 0,5 × 0,5, beton f\'c 30 MPa, manhole besi cor di atas, kepala dengan sayap.',
-      order: ['Sayap 30° terhadap sumbu gorong-gorong, <b>tinggi atasnya mengikuti lereng dan selesai setelah timbunan selesai</b>', 'Kepala gorong-gorong di kaki timbunan', 'Timbunan', 'Saluran drainase jalan tertanam di berm, di atas gorong-gorong dan tidak terpengaruh'],
-      dims: [['Box (dalam)', '0,5 × 0,5'], ['Dinding box', '0,15'], ['Dasar dalam', '0,3 di bawah tanah'], ['Jarak antar manhole', '3,7 (tipikal)'], ['Sayap', '30°, selesai 0,5 setelah kaki timbunan'], ['Jarak atap box ke dasar saluran jalan', '≥ 1,3']] }) }
+      order: ['Area di antara sayap <b>bebas tanah</b> (setinggi tanah dasar)', 'Sayap 30°: tinggi atas mengikuti lereng 1:2 dan <b>berakhir persis di ujung timbunan</b>', 'Kepala gorong-gorong, tinggi atasnya sama dengan muka timbunan di titik itu', 'Timbunan menutup box', 'Saluran drainase jalan tertanam di berm, di atas box dan tidak terpengaruh'],
+      dims: [['Box (dalam)', '0,5 × 0,5'], ['Dinding box', '0,15'], ['Dasar box', 'di atas tanah dasar (tanpa galian)'], ['Jarak antar manhole', '3,7 (tipikal)'], ['Sayap', '30°, panjang 2,1 (sampai kaki timbunan)'], ['Kepala dari as jalan', '16,7'], ['Atap box ke dasar saluran jalan', '≥ 0,2']] }) }
 };
 
 // ---------- UI
@@ -288,7 +291,7 @@ function show(k) {
   [...tabs.children].forEach(b => b.classList.toggle('on', b.dataset.k === k));
   const I = SCENES[k].info();
   info.innerHTML = `<h2>${I.title}</h2><p class="sub">${I.sub}</p><h3>Urutan dari luar ke arah jalan</h3><ol>${I.order.map(t => `<li>${t}</li>`).join('')}</ol><h3>Dimensi asumsi (m)</h3><table class="dim">${I.dims.map(d => `<tr><td>${d[0]}</td><td>${d[1]}</td></tr>`).join('')}</table>${I.ask ? `<div class="ask"><b>Perlu keputusan:</b> ${I.ask}</div>` : ''}`;
-  if (I.ctl) { const w = document.createElement('div'); w.innerHTML = `<h3>Tipe saluran sebelum siphon</h3><select id="chSel">${TRAPS.map((t, n) => `<option value="${n}"${n === ST.trap ? ' selected' : ''}>${t.n}</option>`).join('')}</select>`; info.insertBefore(w, info.children[2]); w.querySelector('select').onchange = e => { ST.trap = +e.target.value; show('siphon'); }; }
+  if (I.ctl) { const w = document.createElement('div'); w.innerHTML = `<h3>Tipe saluran sebelum siphon</h3><select id="chSel">${TRAPS.map((t, n) => `<option value="${n}"${n === ST.trap ? ' selected' : ''}>${t.n}</option>`).join('')}</select><h3>Kemiringan ramp siphon</h3><select id="slSel">${SLOPES.map((t, n) => `<option value="${n}"${n === ST.slope ? ' selected' : ''}>${t.n}</option>`).join('')}</select>`; info.insertBefore(w, info.children[2]); w.querySelector('#chSel').onchange = e => { ST.trap = +e.target.value; show('siphon'); }; w.querySelector('#slSel').onchange = e => { ST.slope = +e.target.value; show('siphon'); }; }
   try { history.replaceState(null, '', '#' + k); } catch (e) {}
 }
 for (const k in SCENES) { const b = document.createElement('button'); b.textContent = SCENES[k].tab; b.dataset.k = k; b.onclick = () => show(k); tabs.appendChild(b); }
@@ -296,7 +299,8 @@ function applyXray() { MATS.earth.transparent = xray; MATS.earth.opacity = xray 
 document.getElementById('bX').onclick = () => { xray = !xray; applyXray(); };
 let showLbl = true; document.getElementById('bL').onclick = e => { showLbl = !showLbl; e.currentTarget.classList.toggle('on', showLbl); };
 const CAMS = { iso: [[30, 13, -24], [13, 0.8, -2]], top: [[13, 52, 0.01], [13, 0, 0]], side: [[13, 3, -52], [13, 1, 0]] };
-function setCam(k) { const [p, t] = CAMS[k]; cam.position.set(...p); ctl.target.set(...t); ctl.update(); }
+const FOCUS = { irig: [14.5, 0.8, 0], talang: [13, 1.2, 0], siphon: [13, 0, 0], cross: [17.5, 0.4, 0] };
+function setCam(k) { const f = FOCUS[cur] || [13, 0, 0], [p, t] = k === 'detail' ? [[f[0] + 7, f[1] + 5, f[2] - 8], f] : CAMS[k]; cam.position.set(...p); ctl.target.set(...t); ctl.update(); }
 document.querySelectorAll('[data-cam]').forEach(b => b.onclick = () => setCam(b.dataset.cam));
 
 function resize() { const r = cv.parentElement.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); cam.aspect = r.width / r.height; cam.updateProjectionMatrix(); }

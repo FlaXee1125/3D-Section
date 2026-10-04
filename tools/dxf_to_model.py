@@ -481,6 +481,26 @@ DECK_TOP = [(0.0, 0.0), (0.4, 0.0), (8.27, -0.236), (10.27, -0.336), (10.54, -0.
 def deck_top(ax):    # tinggi permukaan perkerasan jalan utama relatif as jalan pada |offset| = ax
     return float(np.interp(ax, [p[0] for p in DECK_TOP], [p[1] for p in DECK_TOP]))
 
+def ring8(o, i):
+    """cincin U (bak terbuka di atas) dari 4 titik luar [BL,BR,TR,TL] dan 4 titik dalam: urutan titik tetap sehingga transisi antar bentuk selalu berbentuk U (tidak melebar / terpilin)"""
+    r = [o[0], o[1], o[2], i[2], i[1], i[0], i[3], o[3]]
+    a = sum(r[k][0] * r[(k + 1) % 8][1] - r[(k + 1) % 8][0] * r[k][1] for k in range(8))
+    return r if a > 0 else r[::-1]
+def u_params(conc):
+    """4 titik luar & 4 titik dalam dari poligon beton saluran U / trapesium (hull cembung dan rongga); None bila bentuknya tidak sederhana"""
+    try:
+        hull = conc.convex_hull; gs = polys(hull.difference(conc))
+        if not gs: return None
+        cav = max(gs, key=lambda p: p.area)
+        def four(p):
+            c = list(p.simplify(0.002).exterior.coords)[:-1]
+            if len(c) != 4: return None
+            c.sort(key=lambda a: a[1]); bot = sorted(c[:2], key=lambda a: a[0]); top = sorted(c[2:], key=lambda a: a[0])
+            return [bot[0], bot[1], top[1], top[0]]
+        o, i = four(hull), four(cav)
+        return (o, i) if o and i else None
+    except Exception: return None
+
 def sip_zones(st, c_):
     """zona siphon sepanjang STA: [tetangga ext] | transisi (trapesium -> kotak) | kotak terbuka | SIPHON (turun curam - datar - naik) | kotak terbuka | transisi | [ext].
     Transisi dimulai SIP_PRE m sebelum siphon; panjangnya 2-5 m menurut lebar saluran tetangga (trapesium lebar = transisi lebih panjang)."""
@@ -550,7 +570,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             for s_, sg in (('U', -1), ('S', 1)):
                 # kepala gorong-gorong ditarik ke dalam (dekat jalan) agar talang / siphon berada di luar kepala, di atas saluran terbuka
                 if sk_ == 1 and not st['tal1']: xh = abs(st['cx'][s_]) + 1.2          # tanpa talang: saluran drainase menerus di atas timbunan, kepala di luar saluran
-                else: xh = max(ZC, abs(st['cx'][s_]) - 0.8 - 2.5)
+                else: xh = max(ZC, abs(st['cx'][s_]) - 1.6)               # kepala tepat di dalam saluran drainase: sayap pendek, selesai di kaki timbunan
                 for _, ss_ in SIMPANG:                              # di simpang: gorong-gorong lewat di bawah seluruh mulut simpang
                     if abs(st['sta'] - ss_) < SP_REACH:
                         it = SP_FP.intersection(box(st['sta'] - ss_ - st['bw'] / 2 - 1.0, -XL - 1, st['sta'] - ss_ + st['bw'] / 2 + 1.0, XL + 1))
@@ -694,25 +714,26 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                     for dd in (-0.02, 0.02):
                         if sa_ + 0.01 < p_ + dd < sb_ - 0.01: T.append(round(float(p_ + dd), 3))
                 for lo_, hi_ in ((g['T0'], g['T1']), (g['T2'], g['T3'])):
-                    for t in np.arange(lo_, hi_, 0.5):
+                    for t in np.arange(lo_, hi_, 0.0625):
                         if sa_ + 0.01 < t < sb_ - 0.01: T.append(round(float(t), 3))
         T = sorted(set(T))
         refined = len(T) > 3
         def hull_at(t, s_):
             if okind == 'siphon' and s_ in tr_ctx:            # takik terbuka mengikuti: saluran tetangga -> transisi -> kotak terbuka; siphon tertanam tanpa takik
                 c_ = tr_ctx[s_]; g = c_['g']; cx = c_['cx']
-                bu = lambda e0: (cx - 0.4 - WALL, e0 - WALL, cx + 0.4 + WALL, e0 + 0.95)
+                snap = lambda b_: (b_[0] + 0.03, b_[1], b_[2] - 0.03, b_[3])        # takik sedikit lebih sempit dari beton: tepi galian tersembunyi di dalam dinding beton
+                bu = lambda e0: snap((cx - 0.4 - WALL, e0 - WALL, cx + 0.4 + WALL, e0 + 0.95))
                 if t < g['S0']:
                     hnb = c_['nb']['A'][0]; bn = hnb.bounds if hnb is not None else bu(c_['ba'])
                     if t < g['T0']: return hnb if hnb is not None else box(*bu(c_['ba']))
                     if t < g['T1']:
-                        u = (t - g['T0']) / max(g['T1'] - g['T0'], 1e-6); b0 = bu(c_['ba']); return box(*[bn[i] + (b0[i] - bn[i]) * u for i in range(4)])
+                        u = (t - g['T0']) / max(g['T1'] - g['T0'], 1e-6); b0 = bu(c_['ba']); return box(*snap([bn[i] + (b0[i] - bn[i]) * u for i in range(4)]))
                     return box(*bu(c_['ba']))
                 if t <= g['S1']: return None
                 hnb = c_['nb']['B'][0]; bn = hnb.bounds if hnb is not None else bu(c_['bb'])
                 if t < g['T2']: return box(*bu(c_['bb']))
                 if t < g['T3']:
-                    u = (g['T3'] - t) / max(g['T3'] - g['T2'], 1e-6); b0 = bu(c_['bb']); return box(*[bn[i] + (b0[i] - bn[i]) * u for i in range(4)])
+                    u = (g['T3'] - t) / max(g['T3'] - g['T2'], 1e-6); b0 = bu(c_['bb']); return box(*snap([bn[i] + (b0[i] - bn[i]) * u for i in range(4)]))
                 return hnb if hnb is not None else box(*bu(c_['bb']))
             return None
         def hull_at_orig(t, s_):
@@ -739,7 +760,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             for i in range(len(xsb) - 1):
                 d0, d1 = Gv[i] - Fv[i], Gv[i+1] - Fv[i+1]
                 if d0 * d1 < 0: grid.add(round(xsb[i] + (xsb[i+1]-xsb[i]) * d0 / (d0 - d1), 4))
-        if moving:
+        if moving or okind == 'siphon':          # kolom tepat di sisi takik (hull) tiap stasiun, agar dinding galian tegak dan bersih
             for t in T:
                 for s_, h in hullT[t].items():
                     if h is None: continue
@@ -909,14 +930,23 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                 for key, (zo0, zo1), (zt0, zt1), (ze0, ze1), e0, ur, wcav in (('A', (g['T1'], g['S0']), (g['T0'], g['T1']), (g['a'], g['T0']), ba, u_a, wA), ('B', (g['S1'], g['T2']), (g['T2'], g['T3']), (g['T3'], g['b']), bb, u_b, wB)):
                     add_piece(f'open{key}{s_}', 'culvert', zo0, zo1, lambda x_, ur=ur: [flat(ur)])                # saluran kotak terbuka (talang) tertanam
                     add_piece(f'openw{key}{s_}', 'water', zo0, zo1, lambda x_, wcav=wcav: [flat(list(wcav.exterior.coords)[:-1])])
-                    nb = c_['nb'][key]; npoly = nb[1]
-                    if npoly is not None:
-                        r0 = poly_rings(npoly)[0]; R0, R1 = align_rings([r0, ur])
+                    nb = c_['nb'][key]; npoly = nb[1]; pn = u_params(npoly) if npoly is not None else None
+                    if pn is not None:                                                  # transisi parametrik: tetangga (trapesium / U) -> U kotak, selalu berbentuk U
+                        ou = [(cx - bw_/2 - WALL, e0 - WALL), (cx + bw_/2 + WALL, e0 - WALL), (cx + bw_/2 + WALL, e0 + h_), (cx - bw_/2 - WALL, e0 + h_)]
+                        iu = [(cx - bw_/2, e0), (cx + bw_/2, e0), (cx + bw_/2, e0 + h_), (cx - bw_/2, e0 + h_)]
+                        R0, R1 = ring8(*pn), ring8(ou, iu)
                         def ring_tr(x_, key=key, p0=zt0, p1=zt1, R0=R0, R1=R1):
                             wn = 1 - (x_ - p0) / (p1 - p0) if key == 'A' else (x_ - p0) / (p1 - p0)               # bobot saluran tetangga
-                            return [flat([(R0[i][0] * wn + R1[i][0] * (1 - wn), R0[i][1] * wn + R1[i][1] * (1 - wn)) for i in range(len(R0))])]
+                            return [flat([(R0[i][0] * wn + R1[i][0] * (1 - wn), R0[i][1] * wn + R1[i][1] * (1 - wn)) for i in range(8)])]
+                        r0 = ring8(*pn)
                         if ze1 - ze0 > 0.02: add_piece(f'ext{key}{s_}', 'channel', ze0, ze1, lambda x_, r0=r0: [flat(r0)])
                         if nb[2] is not None and ze1 - ze0 > 0.02: add_piece(f'extw{key}{s_}', 'water', ze0, ze1, lambda x_, rw=poly_rings(nb[2])[0]: [flat(rw)])
+                    elif npoly is not None:
+                        r0 = poly_rings(npoly)[0]; R0, R1 = align_rings([r0, ur])
+                        def ring_tr(x_, key=key, p0=zt0, p1=zt1, R0=R0, R1=R1):
+                            wn = 1 - (x_ - p0) / (p1 - p0) if key == 'A' else (x_ - p0) / (p1 - p0)
+                            return [flat([(R0[i][0] * wn + R1[i][0] * (1 - wn), R0[i][1] * wn + R1[i][1] * (1 - wn)) for i in range(len(R0))])]
+                        if ze1 - ze0 > 0.02: add_piece(f'ext{key}{s_}', 'channel', ze0, ze1, lambda x_, r0=r0: [flat(r0)])
                     else:
                         def ring_tr(x_, ur=ur): return [flat(ur)]
                     add_piece(f'trans{key}{s_}', 'culvert', zt0, zt1, ring_tr)

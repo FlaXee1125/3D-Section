@@ -66,6 +66,12 @@ python3 tools/dxf_to_model.py data/source/3d-Modeling.dxf data/model.json
 - Dasar saluran irigasi = 0,5 m di bawah muka tanah (arahan); tombol **Tembus tanah** menyembunyikan tanah/timbunan agar siphon dan pipa terlihat.
 - Saluran drainase jalan (U-ditch, trapesium, talang) kini berisi air setinggi 60 % tinggi bersih; takik timbunan mengikuti saluran yang bergeser (belok/melipir).
 
+## Gorong-gorong irigasi, transisi siphon
+- Gorong-gorong irigasi (box 1,0 m, dinding 20 cm) menembus **timbunan yang utuh**; kepala gorong-gorong (headwall) ada di tempat lereng timbunan jatuh ke puncak gorong-gorong,
+  dengan **sayap (wingwall) 30°** penahan timbunan; saluran irigasi terbuka (berair) baru mulai di luar kepala gorong-gorong. Sudut 30° mengikuti praktik umum box culvert
+  cast-in-place; gambar standar Bina Marga tidak tersedia, jadi dimensi sayap (panjang 3,5 m, tebal 0,25 m) adalah asumsi.
+- Siphon Skenario 2: saluran (trapesium/U-ditch) → **transisi 3 m menjadi kotak terbuka** → siphon tertutup (turun – datar – naik) → transisi → saluran. Lokasi berdekatan (<5 m) digabung jadi satu siphon.
+
 ## Asumsi / batasan
 - Alinyemen dianggap **lurus** (gambar tidak memuat koordinat peta); antar potongan **interpolasi linear**.
 - Siphon & talang hanya digambar sebagai persegi dimensi bersih → diberi dinding beton **asumsi 0,20 m**.

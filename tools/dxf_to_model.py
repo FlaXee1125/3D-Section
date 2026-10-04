@@ -400,7 +400,7 @@ def find_sites(O, segs):
             st = [f['sta'] for f in ps.values()]; runs.append([min(st), max(st)])
     runs.sort(); merged = []
     for r in runs:
-        if merged and r[0] - merged[-1][1] < 0.5: merged[-1][1] = max(merged[-1][1], r[1])
+        if merged and r[0] - merged[-1][1] < 5.0: merged[-1][1] = max(merged[-1][1], r[1])
         else: merged.append(r)
     def info_at(sk, sta):
         best = None
@@ -491,18 +491,39 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
         run = st['b'] - st['a']
         st['fh'] = max(0.5, min(st['bw'] / 2 + 0.5, run / 2 - 1.0))
         st['dip'] = round(st['zb'] - 0.3 - WALL - 0.95, 3)
-    irig = {'sites': sites, 'simpang': [x['name'] + f" @ {x['sta']}" for x in simps], 'zel': []}
+        st['Ltr'] = round(min(3.0, run * 0.3), 2)                       # panjang transisi saluran -> kotak -> siphon
+        st['fh'] = max(0.5, min(st['bw'] / 2 + 0.5, (run - 2 * st['Ltr']) / 2 - 1.0))
+        st['simp'] = any(abs(st['sta'] - ss_) < SP_REACH for _, ss_ in SIMPANG)
+        st['zcs'] = {}
+        ctop_ = st['zb'] + CH + WALL + 0.3                              # puncak gorong-gorong + selimut 0,3 m
+        for sk_ in (1, 2):
+            cands_ = [f for f in fr if f['sk_t'] == sk_] or fr
+            f_ = min(cands_, key=lambda f: abs(f['sta'] - st['sta']))
+            ea_ = build_frame(f_, floor)[1]; zz = {}
+            for s_, sg in (('U', -1), ('S', 1)):
+                xh = XL - 1.0
+                for xx in np.arange(SP_E0, XL, 0.1):                    # kepala gorong-gorong = tempat lereng timbunan jatuh ke puncak gorong-gorong
+                    if ea_['F0'](sg * xx) <= ctop_: xh = float(xx); break
+                zz[s_] = max(ZC, xh)
+                for _, ss_ in SIMPANG:
+                    if abs(st['sta'] - ss_) < SP_REACH:
+                        it = SP_FP.intersection(box(st['sta'] - ss_ - st['bw'] / 2 - 1.0, -XL - 1, st['sta'] - ss_ + st['bw'] / 2 + 1.0, XL + 1))
+                        if not it.is_empty: zz[s_] = max(zz[s_], max(abs(it.bounds[1]), abs(it.bounds[3])) + 2.5)
+                zz[s_] = round(min(zz[s_], XL - 1.0), 2)
+            st['zcs'][str(sk_)] = zz
+    NB = {}
     for st in sites:
-        zb, bw, d, sc, zc_ = st['zb'], st['bw'], st['d'], st['sta'], st['zc']
-        wd = 0.7 * d
-        outer = rect(sc - bw/2 - WALL, zb - WALL, sc + bw/2 + WALL, zb + CH + WALL)
-        inner = rect(sc - bw/2, zb, sc + bw/2, zb + CH)
-        irig['zel'].append({'m': 'culvert', 'k': 'gorong', 'rings': [flat(outer), flat(inner[::-1])], 'z0': -zc_, 'z1': zc_})
-        irig['zel'].append({'m': 'bore', 'k': 'gorongbore', 'rings': [flat(inner)], 'z0': -zc_, 'z1': zc_})
-        tr = [(sc - bw/2, zb), (sc + bw/2, zb), (sc + bw/2 + wd, zb + wd), (sc - bw/2 - wd, zb + wd)]
-        for sg in (1, -1):
-            irig['zel'].append({'m': 'water', 'k': 'airirigasi', 'rings': [flat(tr)], 'z0': zc_ if sg > 0 else -XL, 'z1': XL if sg > 0 else -zc_})
+        for sk_ in (1, 2):
+            for key, tgt in (('A', st['a']), ('B', st['b'])):
+                best = None
+                for f in fr:
+                    if f['sk_t'] != sk_ or any(f['info'][s_].get('type', '').startswith(('Siphon', 'Talang', 'Box')) for s_ in 'US'): continue
+                    dd = abs(f['sta'] - tgt)
+                    if best is None or dd < best[0]: best = (dd, f)
+                NB[(st['sta'], sk_, key)] = best[1] if best and best[0] < 80 else None
+    irig = {'sites': sites, 'simpang': [x['name'] + f" @ {x['sta']}" for x in simps], 'zel': []}
     z['irigasi'] = irig
+    done_sites = set()
     for (sk, sal, bag), ps in sorted(segs.items(), key=lambda kv: (kv[0][0], kv[1]['AWAL']['sta'])):
         secs = [ps[p] for p in POS]
         ovr_ = ovr_map.get((sk, sal, bag)); ovr = ovr_[1] if ovr_ else None; okind = ovr_[0] if ovr_ else None
@@ -541,9 +562,37 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                 if sa_ + 0.01 < t < sb_ - 0.01: T.append(round(float(t), 3))
         if moving:
             for t in np.arange(sa_ + 40.0, sb_ - 20.0, 40.0): T.append(round(float(t), 3))
+        tr_ctx = {}
+        if okind == 'siphon':
+            st_ = ovr; Ltr_ = st_['Ltr']
+            for p_ in (st_['a'], st_['a'] + Ltr_ - 0.02, st_['a'] + Ltr_ + 0.02, st_['b'] - Ltr_ - 0.02, st_['b'] - Ltr_ + 0.02, st_['b']):
+                if sa_ + 0.01 < p_ < sb_ - 0.01: T.append(round(float(p_), 3))
+            for t in list(np.arange(st_['a'], st_['a'] + Ltr_, 0.5)) + list(np.arange(st_['b'] - Ltr_, st_['b'], 0.5)):
+                if sa_ + 0.01 < t < sb_ - 0.01: T.append(round(float(t), 3))
+            for s_ in 'US':
+                nbs = {}
+                for key in 'AB':
+                    fnb = NB.get((st_['sta'], 2, key))
+                    if fnb is not None:
+                        eb = build_frame(fnb, floor); nbs[key] = (eb[1]['hulls'].get(s_), {n_: p_ for n_, m_, p_ in eb[0]}.get(f'chan{s_}0'))
+                    else: nbs[key] = (None, None)
+                ba, bb = st_['bt'][2][s_]
+                if ba is None or bb is None: ba = bb = secs[0]['info'][s_].get('bottom') or 53.0
+                tr_ctx[s_] = dict(nb=nbs, cx=st_['cx'][s_], ba=ba, bb=bb)
         T = sorted(set(T))
         refined = len(T) > 3
         def hull_at(t, s_):
+            if okind == 'siphon' and s_ in tr_ctx:            # transisi trapesium/U-ditch -> kotak: takik terbuka mengikuti bentuk transisi
+                c_ = tr_ctx[s_]; st_ = ovr; Ltr_ = st_['Ltr']
+                for key, u in (('A', (t - st_['a']) / Ltr_), ('B', (st_['b'] - t) / Ltr_)):
+                    if 0 <= u <= 1:
+                        hnb = c_['nb'][key][0]; e0 = c_['ba'] if key == 'A' else c_['bb']
+                        bu = (c_['cx'] - 0.4 - WALL, e0 - WALL, c_['cx'] + 0.4 + WALL, e0 + 0.95)
+                        bn = hnb.bounds if hnb is not None else bu
+                        bnd = [bn[i] + (bu[i] - bn[i]) * u for i in range(4)]
+                        return box(*bnd)
+                return None
+        def hull_at_orig(t, s_):
             """hull saluran pada STA t: bergeser linear antar potongan (geser hull potongan terdekat)"""
             hs_ = [ea['hulls'].get(s_) for _, ea in bf]
             if all(h_ is None for h_ in hs_): return None
@@ -553,10 +602,12 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             j = int(np.argmin([abs(t - v) for v in stas]))
             dx = float(np.interp(t, stas, [b_[0] for b_ in bb])) - bb[j][0]; dy = float(np.interp(t, stas, [b_[1] for b_ in bb])) - bb[j][1]
             return affinity.translate(hs_[j], dx, dy)
+        def hull_all(t, s_):
+            return hull_at(t, s_) if okind == 'siphon' else hull_at_orig(t, s_)
         def hb(h, x):
             ln = LineString([(x, -1e3), (x, 1e3)]).intersection(h)
             return None if ln.is_empty else ln.bounds[1]
-        hullT = {t: {s_: hull_at(t, s_) for s_ in 'US'} for t in T}
+        hullT = {t: {s_: hull_all(t, s_) for s_ in 'US'} for t in T}
         # grid x bersama
         grid = set()
         for _, ea in bf:
@@ -574,6 +625,9 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
         if sp_here:
             for k_ in range(0, 106):
                 for sg in (1, -1): grid.add(round(sg * (SP_E0 + 0.25 * k_), 4))
+        for st_, _e in trench:
+            zz_ = st_['zcs'][str(sk)]
+            for v_ in (zz_['S'], -zz_['U']): grid |= {round(v_, 4), round(v_ - 1e-3 * (1 if v_ > 0 else -1), 4)}
         grid = {v for v in grid if -XL <= v <= XL}
         grid = sorted(grid); ug = []
         for v in grid:
@@ -613,14 +667,16 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                 Fn = np.where(on & (inside | ~prot), np.maximum(Fv, Fsub), Fv)
                 Vv = np.where(inside, np.maximum(Hs, Fn), np.where(on, np.maximum(Vv, Fn), Vv))
                 Fv = Fn
-            for st, ext in trench:          # gorong-gorong irigasi di bawah mulut simpang: tutup dengan timbunan sampai awal saluran terbuka
-                if st['zc'] > ZC + 1:
+            for st, ext in trench:          # gorong-gorong irigasi: lereng timbunan tetap utuh, saluran terbuka baru mulai di kepala gorong-gorong
+                zz = st['zcs'][str(sk)]; zarr = np.where(xa >= 0, zz['S'], zz['U'])
+                if st['simp']:
                     cover = st['zb'] + CH + WALL + 0.25 - 0.5 * max(0.0, abs(t - st['sta']) - (st['bw'] / 2 + WALL))
-                    m2 = (np.abs(xa) >= SP_E0) & (np.abs(xa) < st['zc'])
+                    m2 = (np.abs(xa) >= SP_E0) & (np.abs(xa) < zarr)
                     Fv = np.where(m2, np.maximum(Fv, cover), Fv); Vv = np.where(m2, np.maximum(Vv, np.minimum(cover, Fv)), Vv)
             for st, ext in trench:
+                zz = st['zcs'][str(sk)]; zarr = np.where(xa >= 0, zz['S'], zz['U'])
                 hf = st['zb'] + np.maximum(0.0, abs(t - st['sta']) - st['bw'] / 2) * 1.0
-                m = np.abs(xa) >= st['zc'] - 1e-9
+                m = np.abs(xa) >= zarr - 1e-9
                 Fv = np.where(m, np.minimum(Fv, hf), Fv); Sv = np.where(m, np.minimum(Sv, hf), Sv); Vv = np.where(m, np.minimum(Vv, hf), Vv)
             Sv = np.minimum(Sv, Fv)
             outside_t = (xa <= tl + 1e-6) | (xa >= tr_ - 1e-6)
@@ -693,22 +749,43 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             for n, i in enumerate(idx):
                 aligned[i] = [slots[ri][n] for ri in range(nh + 1)]
             elements.append({'k': k, 'm': mats[0], 'r': [None if o is None else [[round(v, 3) for pt in rg for v in pt] for rg in o] for o in aligned]})
-        # --- siphon lurus di bawah saluran irigasi (profil turun - datar - naik, simetris terhadap saluran)
+        # --- siphon lurus di bawah saluran irigasi: [transisi trapesium -> kotak] -> siphon (turun - datar - naik) -> [transisi kotak -> trapesium]
+        def add_piece(k, m, p0, p1, ring_fn, bps=()):
+            lo, hi = max(p0, sa_), min(p1, sb_)
+            if hi - lo < 0.02: return
+            xs_ = sorted({lo, hi} | {p for p in bps if lo < p < hi})
+            elements.append({'k': k, 'm': m, 'xs': [round(v, 3) for v in xs_], 'r': [ring_fn(x_) for x_ in xs_]})
         if okind == 'siphon':
-            st = ovr; sc = st['sta']; fh = st['fh']
-            prof_x = [st['a'], sc - fh, sc + fh, st['b']]
-            xs = sorted({sa_, sb_} | {p for p in prof_x if sa_ < p < sb_})
+            st = ovr; Ltr = st['Ltr']; a_, b_ = st['a'], st['b']; fh = st['fh']
+            cs = float(np.clip(st['sta'], a_ + Ltr + 1.0 + fh, b_ - Ltr - 1.0 - fh)) if (b_ - a_) > 2 * Ltr + 2 + 2 * fh else (a_ + b_) / 2
+            prof_x = [a_ + Ltr, cs - fh, cs + fh, b_ - Ltr]
             for s_ in 'US':
-                cx = st['cx'][s_]; ba, bb = st['bt'][2][s_]
-                if ba is None or bb is None: ba = bb = secs[0]['info'][s_].get('bottom') or 53.0
+                c_ = tr_ctx[s_]; cx, ba, bb = c_['cx'], c_['ba'], c_['bb']; bw_ = 0.8; h_ = 0.95
                 prof_y = [ba, st['dip'], st['dip'], bb]
-                ib = [float(np.interp(x_, prof_x, prof_y)) for x_ in xs]
-                bw_ = 0.8; h_ = 0.95; outs, ins = [], []
-                for e0 in ib:
-                    outs.append([flat(rect(cx - bw_/2 - WALL, e0 - WALL, cx + bw_/2 + WALL, e0 + h_ + WALL)), flat(rect(cx - bw_/2, e0, cx + bw_/2, e0 + h_, cw=True))])
-                    ins.append([flat(rect(cx - bw_/2, e0, cx + bw_/2, e0 + h_))])
-                elements.append({'k': f'siphon{s_}', 'm': 'culvert', 'xs': [round(v, 3) for v in xs], 'r': outs})
-                elements.append({'k': f'siphonbore{s_}', 'm': 'bore', 'xs': [round(v, 3) for v in xs], 'r': ins})
+                def sph(x_):
+                    e0 = float(np.interp(x_, prof_x, prof_y)); return e0
+                def ring_sip(x_, e0=None):
+                    e0 = sph(x_); return [flat(rect(cx - bw_/2 - WALL, e0 - WALL, cx + bw_/2 + WALL, e0 + h_ + WALL)), flat(rect(cx - bw_/2, e0, cx + bw_/2, e0 + h_, cw=True))]
+                def ring_bore(x_):
+                    e0 = sph(x_); return [flat(rect(cx - bw_/2, e0, cx + bw_/2, e0 + h_))]
+                add_piece(f'siphon{s_}', 'culvert', a_ + Ltr, b_ - Ltr, ring_sip, prof_x)
+                add_piece(f'siphonbore{s_}', 'bore', a_ + Ltr, b_ - Ltr, ring_bore, prof_x)
+                u_conc = poly_rings(talang_geom(cx, ba)[0])[0]; u_conc_b = poly_rings(talang_geom(cx, bb)[0])[0]
+                for key, p0, p1, e0, ur in (('A', a_, a_ + Ltr, ba, u_conc), ('B', b_ - Ltr, b_, bb, u_conc_b)):
+                    npoly = c_['nb'][key][1]
+                    if npoly is not None:
+                        r0 = poly_rings(npoly)[0]
+                        al = align_rings([r0, ur]); R0, R1 = al[0], al[1]
+                        def ring_tr(x_, key=key, p0=p0, p1=p1, R0=R0, R1=R1):
+                            u = (x_ - p0) / (p1 - p0)
+                            u = 1 - u if key == 'A' else u                 # A: tetangga di p0; B: tetangga di p1
+                            u = (x_ - p0) / (p1 - p0) if key == 'B' else (1 - (x_ - p0) / (p1 - p0))
+                            return [flat([(R0[i][0] * u + R1[i][0] * (1 - u), R0[i][1] * u + R1[i][1] * (1 - u)) for i in range(len(R0))])]
+                    else:
+                        def ring_tr(x_, ur=ur): return [flat(ur)]
+                    add_piece(f'trans{key}{s_}', 'culvert', p0, p1, ring_tr)
+                    wcav = box(cx - bw_/2, e0, cx + bw_/2, e0 + WFR * h_)
+                    add_piece(f'transw{key}{s_}', 'water', p0, p1, lambda x_, wcav=wcav: [flat(list(wcav.exterior.coords)[:-1])])
         # --- pematang sawah (di luar kaki timbunan)
         zel = []
         toeabs = {'U': max(abs(t[0]) for t in toes), 'S': max(abs(t[1]) for t in toes)}
@@ -779,6 +856,27 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                 add_slab('mh', 'mh', M(Point(u, v).buffer(0.45, 8)), 1.5, 0.04, y_from_surface=True)
             for chn in SIMP['pipa']:
                 add_slab('pipa', 'pp', M(LineString([tuple(q) for q in chn]).buffer(0.15, cap_style=2, join_style=2)), 0.15, 0.15, y_from_surface=True, dy=-0.8)
+        # --- gorong-gorong irigasi di bawah timbunan: kepala gorong-gorong + sayap penahan timbunan; saluran terbuka berair di luar kaki timbunan
+        for st in sites:
+            if not (sa_ - 1e-6 <= st['sta'] < sb_ + 1e-6) or (sk, st['sta']) in done_sites: continue
+            done_sites.add((sk, st['sta']))
+            zz = st['zcs'][str(sk)]; zb, bw, d, sc = st['zb'], st['bw'], st['d'], st['sta']; wd = 0.7 * d
+            outer = rect(sc - bw/2 - WALL, zb - WALL, sc + bw/2 + WALL, zb + CH + WALL); inner = rect(sc - bw/2, zb, sc + bw/2, zb + CH)
+            zel.append({'m': 'culvert', 'k': 'gorong', 'rings': [flat(outer), flat(inner[::-1])], 'z0': -zz['U'], 'z1': zz['S']})
+            zel.append({'m': 'bore', 'k': 'gorongbore', 'rings': [flat(inner)], 'z0': -zz['U'] - 0.3, 'z1': zz['S'] + 0.3})
+            tr = [(sc - bw/2, zb), (sc + bw/2, zb), (sc + bw/2 + wd, zb + wd), (sc - bw/2 - wd, zb + wd)]
+            zel.append({'m': 'water', 'k': 'airirigasi', 'rings': [flat(tr)], 'z0': zz['S'] + 0.25, 'z1': XL})
+            zel.append({'m': 'water', 'k': 'airirigasi', 'rings': [flat(tr)], 'z0': -XL, 'z1': -zz['U'] - 0.25})
+            ctop = zb + CH + WALL; wtop = ctop + 0.35; ww = bw / 2 + WALL + 0.5
+            hw_outer = rect(sc - ww, zb - WALL - 0.3, sc + ww, wtop)
+            for sg, zc_ in ((1, zz['S']), (-1, zz['U'])):
+                z0_, z1_ = (zc_ - 0.05, zc_ + 0.25) if sg > 0 else (-zc_ - 0.25, -zc_ + 0.05)
+                zel.append({'m': 'culvert', 'k': 'kepala', 'rings': [flat(hw_outer), flat(inner[::-1])], 'z0': z0_, 'z1': z1_})
+                for sd in (1, -1):                                   # sayap (wingwall) 30 derajat, menahan timbunan di kiri-kanan mulut gorong-gorong
+                    p0 = (sc + sd * ww, sg * (zc_ + 0.25)); L_ = 3.5
+                    p1 = (p0[0] + sd * L_ * math.sin(math.radians(30)), p0[1] + sg * L_ * math.cos(math.radians(30)))
+                    rb = ribbon(p0, p1, 0.25)
+                    if rb: sl.append({'m': 'culvert', 'k': 'sayap', 'rings': [flat(ccw(rb))], 'y0': round(wtop, 3), 'gx': -0.5 * sg, 'z0': round(sg * (zc_ + 0.25), 3), 'hb': round(wtop - (zb - 0.3), 3), 'ht': 0.0})
         water = None
         if O in FLOOD and all(hullT[t_]['S'] is not None for t_ in T):
             W = [MAB0] * 3

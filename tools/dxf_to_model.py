@@ -550,12 +550,31 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             dd = abs(f['sta'] - sta_t)
             if best is None or dd < best[0]: best = (dd, f['info'][s_]['bottom'])
         return best[1] if best else None
+    NB = {}
+    for st in sites:
+        for sk_ in (1, 2):
+            for key, tgt in (('A', st['a']), ('B', st['b'])):
+                best = None
+                for f in fr:
+                    if f['sk_t'] != sk_ or any(f['info'][s_].get('type', '').startswith(('Siphon', 'Talang', 'Box')) for s_ in 'US'): continue
+                    dd = abs(f['sta'] - tgt)
+                    if best is None or dd < best[0]: best = (dd, f)
+                NB[(st['sta'], sk_, key)] = best[1] if best and best[0] < 80 else None
     for st in sites:
         cands = [f for f in fr if st['a'] - 1 <= f['sta'] <= st['b'] + 1] or fr
         f0 = min(cands, key=lambda f: abs(f['sta'] - st['sta']))
         ea0 = build_frame(f0, floor)[1]
         st['cx'] = {s_: round(ea0['centers'].get(s_, (-17.0 if s_ == 'U' else 17.0)), 3) for s_ in 'US'}
         st['bt'] = {sk_: {s_: [neigh_bottom(sk_, st['a'], s_), neigh_bottom(sk_, st['b'], s_)] for s_ in 'US'} for sk_ in (1, 2)}
+        st['cx2'] = {}                                   # pusat saluran Skenario 2 = pusat saluran tetangga (trapesium/U di gambar): siphon lurus sejajar jalan, tanpa belok
+        for s_ in 'US':
+            cs_ = []
+            for key in 'AB':
+                fnb = NB.get((st['sta'], 2, key))
+                if fnb is not None:
+                    h_ = build_frame(fnb, floor)[1]['hulls'].get(s_)
+                    if h_ is not None: cs_.append((h_.bounds[0] + h_.bounds[2]) / 2)
+            st['cx2'][s_] = round(float(np.mean(cs_)), 3) if cs_ else st['cx'][s_]
         run = st['b'] - st['a']
         st['dip'] = round(st['zb'] - 0.3 - WALL - 0.95, 3)
         st['simp'] = any(abs(st['sta'] - ss_) < SP_REACH for _, ss_ in SIMPANG)
@@ -567,7 +586,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             for s_, sg in (('U', -1), ('S', 1)):
                 # kepala gorong-gorong ditarik ke dalam (dekat jalan) agar talang / siphon berada di luar kepala, di atas saluran terbuka
                 if sk_ == 1 and not st['tal1']: xh = abs(st['cx'][s_]) + 1.2          # tanpa talang: saluran drainase menerus di atas timbunan, kepala di luar saluran
-                else: xh = max(ZC, abs(st['cx'][s_]) - 1.6)               # kepala tepat di dalam saluran drainase: sayap pendek, selesai di kaki timbunan
+                else: xh = max(ZC, abs((st['cx2'] if sk_ == 2 else st['cx'])[s_]) - 1.6)               # kepala tepat di dalam saluran drainase: sayap pendek, selesai di kaki timbunan
                 for _, ss_ in SIMPANG:                              # di simpang: gorong-gorong lewat di bawah seluruh mulut simpang
                     if abs(st['sta'] - ss_) < SP_REACH:
                         it = SP_FP.intersection(box(st['sta'] - ss_ - st['bw'] / 2 - 1.0, -XL - 1, st['sta'] - ss_ + st['bw'] / 2 + 1.0, XL + 1))
@@ -577,16 +596,6 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                 zz[s_] = xh; zz['Fh' + s_] = round(float(ea_['F0'](sg * xh)), 3); zz['xt' + s_] = round(max(xt, xh + 0.5), 2)
                 zz['Ff' + s_] = round(float(ea_['F0'](sg * (xh + 0.3))), 3); zz['Gt' + s_] = round(float(ea_['G'](sg * zz['xt' + s_])), 3)
             st['zcs'][str(sk_)] = zz
-    NB = {}
-    for st in sites:
-        for sk_ in (1, 2):
-            for key, tgt in (('A', st['a']), ('B', st['b'])):
-                best = None
-                for f in fr:
-                    if f['sk_t'] != sk_ or any(f['info'][s_].get('type', '').startswith(('Siphon', 'Talang', 'Box')) for s_ in 'US'): continue
-                    dd = abs(f['sta'] - tgt)
-                    if best is None or dd < best[0]: best = (dd, f)
-                NB[(st['sta'], sk_, key)] = best[1] if best and best[0] < 80 else None
     SC = {}
     def sipctx(st_, s_):
         k_ = (st_['sta'], s_)
@@ -600,7 +609,8 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             ba, bb = st_['bt'][2][s_]
             if ba is None or bb is None:
                 fn_ = min([f for f in fr if f['sk_t'] == 2] or fr, key=lambda f: abs(f['sta'] - st_['sta'])); ba = bb = fn_['info'][s_].get('bottom') or 53.0
-            SC[k_] = dict(nb=nbs, cx=st_['cx'][s_], ba=ba, bb=bb); SC[k_]['g'] = sip_zones(st_, SC[k_])
+            SC[k_] = dict(nb=nbs, cx=st_['cx2'][s_], ba=ba, bb=bb); SC[k_]['g'] = sip_zones(st_, SC[k_])
+            if os.environ.get('DEBUG_SIP'): print('SIP', O, st_['sta'], s_, 'cx', st_['cx'][s_], 'A', None if nbs['A'][0] is None else round(sum(nbs['A'][0].bounds[0::2]) / 2, 2), 'B', None if nbs['B'][0] is None else round(sum(nbs['B'][0].bounds[0::2]) / 2, 2), 'widthA', None if nbs['A'][0] is None else round(nbs['A'][0].bounds[2] - nbs['A'][0].bounds[0], 2), 'widthB', None if nbs['B'][0] is None else round(nbs['B'][0].bounds[2] - nbs['B'][0].bounds[0], 2))
         return SC[k_]
     for st in sites:                                    # ramp siphon curam dekat saluran irigasi; lebar saluran irigasi menyesuaikan panjang rentang siphon
         a_, b_, sc = st['a'], st['b'], st['sta']; bts = st['bt'][2]
@@ -612,6 +622,15 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             if space < Lr: Lr = max(0.3, space)
             st['bw'] = round(bw, 3)
         st['Lr'] = round(Lr, 3); st['drop'] = round(drop, 3)
+    if os.environ.get('DEBUG_SIP'):
+        for st in sites:
+            for sk_ in (1, 2):
+                r_ = []
+                for key in 'AB':
+                    fnb = NB.get((st['sta'], sk_, key))
+                    if fnb is None: r_.append(None); continue
+                    eb = build_frame(fnb, floor)[1]; r_.append({s_: (round(sum(eb['hulls'][s_].bounds[0::2]) / 2, 2) if s_ in eb['hulls'] else None) for s_ in 'US'})
+                print('NBC', O, st['sta'], 'S%d' % sk_, 'cx', st['cx'], 'A', r_[0], 'B', r_[1])
     irig = {'sites': sites, 'simpang': [x['name'] + f" @ {x['sta']}" for x in simps], 'zel': []}
     z['irigasi'] = irig
     # --- gorong-gorong kawasan (cross drain): hanya Skenario 1; diturunkan sedikit dari elevasi acuan dan dijaga di bawah dasar saluran tepi jalan
@@ -657,7 +676,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             tags.append({'sk': sk_, 'sta': round(st_['sta'] + st_['bw'] / 2 + 0.1, 2), 'z': round(zz['S'] + 0.3 + 0.5 * lw_, 2), 'y': round(zz['FhS'] - 0.25 * lw_ - 0.0, 2), 'kind': 'conc', 'text': 'Wing', 'r': 50})
             tags.append({'sk': sk_, 'sta': st_['sta'], 'z': round(min(zz['xtS'] + 3.0, XL - 1.0), 2), 'y': round(st_['zb'] + 0.3, 2), 'kind': 'canal', 'text': 'Saluran irigasi', 'r': 70})
         if st_['tal1']: tags.append({'sk': 1, 'sta': st_['sta'], 'z': round(st_['cx']['S'], 2), 'y': round(st_['bt'][1]['S'][0] + 1.1 if st_['bt'][1]['S'][0] else st_['zb'] + 2.0, 2), 'kind': 'talang', 'text': 'Talang', 'r': 90})
-        tags.append({'sk': 2, 'sta': st_['sta'], 'z': round(st_['cx']['S'], 2), 'y': round(st_['dip'] + 0.5, 2), 'kind': 'siphon', 'text': 'Siphon', 'r': 90})
+        tags.append({'sk': 2, 'sta': st_['sta'], 'z': round(st_['cx2']['S'], 2), 'y': round(st_['dip'] + 0.5, 2), 'kind': 'siphon', 'text': 'Siphon', 'r': 90})
     for sp_ in simps:
         dk_ = next((f_['deck'] for f_ in fr if abs(f_['sta'] - sp_['sta']) < 30), 55.0)
         tags.append({'sk': 0, 'sta': sp_['sta'], 'z': 0, 'y': round(dk_ + 0.3, 2), 'kind': 'simpang', 'text': sp_['name'], 'r': 190})

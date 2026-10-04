@@ -224,20 +224,20 @@ const trLen = r => Math.min(5, Math.max(2, 2.5 * (r.top - 1.0)));      // panjan
 const SCENES = {
   irig: { tab: 'Gorong-gorong irigasi · tanpa talang', build() {
     const xh = P.xb1; chanSeg(-P.Z, P.Z, BOX, BOX, MATS.ditch); earth(cutBoth(cutCanal(xh - 0.25)), HOLE(xh)); road(); canal(xh - 0.25); irrigCulvert(xh); drawChannels();
-    label('Badan jalan', 0, P.Hc + 0.3, -6); label('Timbunan lereng 1:2', 11, 2.1, -7); label('Saluran drainase (tertanam di timbunan, menerus)', P.xc, 2.2, -8.5, 'ditch');
-    label('Kepala gorong-gorong', xh, 2.3, -2.5, 'conc'); label('Sayap / dinding penahan sejajar lereng 1:2', 17.2, 0.9, 2.5, 'conc'); label('Saluran irigasi terbuka', 21, 0.2, 0);
-    label('Barrel gorong-gorong irigasi', 6, 0.9, 0, 'culvert'); },
+    label('Badan jalan', 0, P.Hc + 0.3, -6); label('Timbunan', 11, 2.1, -7); label('Saluran drainase', P.xc, 2.2, -8.5, 'ditch');
+    label('Kepala gorong-gorong', xh, 2.3, -2.5, 'conc'); label('Wing', 17.2, 0.9, 2.5, 'conc'); label('Saluran irigasi', 21, 0.2, 0);
+    label('Gorong-gorong', 6, 0.9, 0, 'culvert'); },
     info: () => ({ title: 'Skenario 1 · gorong-gorong irigasi tanpa talang', sub: 'Berlaku di O5 (8+339,85), O7 (11+625,23), O8 (14+055,87): di Skenario 1 tidak ada talang.',
-      order: ['Saluran irigasi terbuka', 'Sayap / dinding penahan, sejajar lereng timbunan 1:2 (selesai di kaki timbunan)', 'Kepala gorong-gorong (di tepi berm)', 'Timbunan', 'Saluran drainase jalan, <b>tertanam di timbunan</b> (bibir rata muka berm) dan menerus'],
+      order: ['Saluran irigasi', 'Sayap / dinding penahan, sejajar lereng timbunan 1:2 (selesai di kaki timbunan)', 'Kepala gorong-gorong (di tepi berm)', 'Timbunan', 'Saluran drainase jalan, <b>tertanam di timbunan</b> (bibir rata muka berm) dan menerus'],
       dims: [['Gorong-gorong irigasi (dalam)', '1,0 × 0,8'], ['Tebal dinding gorong-gorong', '0,25'], ['Lebar saluran irigasi', '4,0'], ['Dasar saluran irigasi', '0,5 di bawah tanah'], ['Kepala dari as jalan', '14,5 (tepi berm)'], ['Lereng timbunan', '1 : 2'], ['Berm saluran drainase', '3,0'], ['Saluran drainase (luar)', '1,0 × 1,0, bibir rata berm'], ['Atap gorong-gorong ke dasar saluran', '0,45']] }) },
   talang: { tab: 'Talang (Skenario 1)', build() {
     const xh = 11.0, hf = P.bw / 2 + P.wallT + 0.6;
     chanSeg(-P.Z, -hf, BOX, BOX, MATS.ditch); chanSeg(-hf, hf, BOX, BOX, MATS.talang); chanSeg(hf, P.Z, BOX, BOX, MATS.ditch);
     earth(cutBoth(cutCanal(xh - 0.25)), HOLE(xh)); road(); canal(xh - 0.25, [P.xc - 0.5, P.xc + 0.5, P.yb - 1.0]); irrigCulvert(xh); drawChannels();
-    label('Kepala gorong-gorong ditarik ke dalam', xh, 2.7, -2.5, 'conc'); label('Talang di luar kepala, di atas saluran irigasi', P.xc, 2.35, 0, 'talang'); label('Dinding penahan (tumpuan talang)', 12.0, 1.2, 2.6, 'conc');
-    label('Saluran irigasi terbuka (di bawah talang)', 20.5, 0.2, 0); label('Saluran drainase tertanam di berm', P.xc, 2.2, -8, 'ditch'); label('Timbunan lereng 1:2', 11, 2.1, 7); },
+    label('Kepala gorong-gorong', xh, 2.7, -2.5, 'conc'); label('Talang', P.xc, 2.35, 0, 'talang'); label('Dinding penahan', 12.0, 1.2, 2.6, 'conc');
+    label('Saluran irigasi', 20.5, 0.2, 0); label('Saluran drainase', P.xc, 2.2, -8, 'ditch'); label('Timbunan', 11, 2.1, 7); },
     info: () => ({ title: 'Skenario 1 · talang di atas saluran irigasi', sub: 'Berlaku di O4 (6+283,89), O6 (9+942,90 s.d. 9+949,90), O9 (14+714,76 s.d. 14+729,00).',
-      order: ['Saluran irigasi terbuka', 'Dinding penahan sejajar lereng 1:2, <b>menjadi tumpuan talang</b>', 'Talang (saluran drainase kotak) melintas di atas saluran irigasi, setinggi saluran drainase', 'Kepala gorong-gorong <b>lebih ke dalam</b> (dekat jalan)', 'Timbunan'],
+      order: ['Saluran irigasi', 'Dinding penahan sejajar lereng 1:2, <b>menjadi tumpuan talang</b>', 'Talang (saluran drainase kotak) melintas di atas saluran irigasi, setinggi saluran drainase', 'Kepala gorong-gorong <b>lebih ke dalam</b> (dekat jalan)', 'Timbunan'],
       dims: [['Kepala dari as jalan', '11,0'], ['Talang (luar)', '1,0 × 1,0'], ['Bentang talang (antar tumpuan)', '4,4'], ['Lebar saluran irigasi', '4,0'], ['Dasar talang = dasar saluran drainase', '1,0 di atas tanah dasar']] }) },
   siphon: { tab: 'Siphon (Skenario 2)', build() {
     const xh = 11.0, hf = P.bw / 2 + P.wallT, low = P.bed - 0.3 - 1.0, drop = (P.yb - 1.0) - low, ramp = SLOPES[ST.slope].k * drop, rs = hf + ramp, sel = TRAPS[ST.trap];
@@ -250,9 +250,8 @@ const SCENES = {
     earth(cutBoth(cutCanal(xh - 0.25)), HOLE(xh)); road(); canal(xh - 0.25); irrigCulvert(xh); drawChannels();
     const path = [[-rs, P.yb - 1.0], [-hf, low], [hf, low], [rs, P.yb - 1.0]];
     bothSides(s => sweepBox(s * P.xc, 1.0, 1.0, path, MATS.siphon));
-    if (!sel.box) label('Saluran trapesium', P.xc, 2.6, -zT - 3, 'ditch'), label(`Transisi ${L.toFixed(1).replace('.', ',')} m (trapesium → kotak)`, P.xc, 2.5, -zT + L / 2, 'trans');
-    label('Saluran kotak (terbuka)', P.xc, 2.4, -(rs + (sel.box ? 4 : (10 - L) / 2)), 'ditch'); label('Siphon turun sebelum saluran irigasi', P.xc, 1.2, -(hf + ramp / 2), 'siphon'); label('Siphon mendatar di bawah dasar saluran irigasi', P.xc, -1.0, 0, 'siphon');
-    label('Siphon naik setelah saluran irigasi', P.xc, 1.2, hf + ramp / 2, 'siphon'); label('Saluran irigasi terbuka', 20.5, 0.2, 0); label('Kepala gorong-gorong', xh, 2.7, -2.5, 'conc'); },
+    if (!sel.box) label('Saluran trapesium', P.xc, 2.6, -zT - 3, 'ditch'), label('Transisi', P.xc, 2.5, -zT + L / 2, 'trans');
+    label('Saluran kotak', P.xc, 2.4, -(rs + (sel.box ? 4 : (10 - L) / 2)), 'ditch'); label('Siphon', P.xc, -1.0, 0, 'siphon'); label('Saluran irigasi', 20.5, 0.2, 0); label('Kepala gorong-gorong', xh, 2.7, -2.5, 'conc'); },
     info: () => { const sel = TRAPS[ST.trap], R = sel.box ? null : RING.trap(sel.b, sel.H, sel.zs), L = sel.box ? 0 : trLen(R);
       return { title: 'Skenario 2 · siphon di bawah saluran irigasi', sub: 'Berlaku di O5 (8+339,85), O6 (9+942,90), O7 (11+625,23), O8 (14+064,93), O9 (14+714,76).', ctl: 'chSel',
       order: sel.box ? ['Saluran kotak tertanam di berm', 'Box siphon <b>turun</b> sebelum saluran irigasi', 'Mendatar di bawah dasar saluran irigasi', 'Box <b>naik</b> setelah saluran irigasi', 'Saluran kotak kembali'] :
@@ -276,8 +275,8 @@ const SCENES = {
       }
       const mx = s * 2.4; box(mx - 0.55, mx + 0.55, yTop, P.Hc, -0.55, 0.55, MATS.conc); box(mx - 0.3, mx + 0.3, P.Hc, P.Hc + 0.06, -0.3, 0.3, MATS.iron);
     }
-    label('Kepala gorong-gorong', xhead, 1.2, -1.3, 'conc'); label('Sayap 30°: ujungnya = ujung timbunan', P.xt, 0.6, 2.4, 'conc'); label('Area di antara sayap bebas tanah', P.xt - 0.8, 0.1, 0, 'ditch'); label('Box 0,5 × 0,5 di atas tanah dasar', 8, 1.0, 0, 'cross'); label('Manhole (tutup besi cor)', 2.4, 2.8, 0.9, 'iron');
-    label('Saluran drainase jalan tertanam di berm, tidak terganggu', P.xc, 2.2, -8, 'ditch'); label('Timbunan lereng 1:2', 11, 2.1, 7); },
+    label('Kepala gorong-gorong', xhead, 1.2, -1.3, 'conc'); label('Wing', P.xt, 0.6, 2.4, 'conc'); label('Area bebas tanah', P.xt - 0.8, 0.1, 0, 'ditch'); label('Gorong-gorong kawasan', 8, 1.0, 0, 'cross'); label('Manhole', 2.4, 2.8, 0.9, 'iron');
+    label('Saluran drainase', P.xc, 2.2, -8, 'ditch'); label('Timbunan', 11, 2.1, 7); },
     info: () => ({ title: 'Gorong-gorong kawasan · Skenario 1', sub: 'Tipikal TIPIKAL_GORONG_GORONG.dxf: box 0,5 × 0,5, beton f\'c 30 MPa, manhole besi cor di atas, kepala dengan sayap.',
       order: ['Area di antara sayap <b>bebas tanah</b> (setinggi tanah dasar)', 'Sayap 30°: tinggi atas mengikuti lereng 1:2 dan <b>berakhir persis di ujung timbunan</b>', 'Kepala gorong-gorong, tinggi atasnya sama dengan muka timbunan di titik itu', 'Timbunan menutup box', 'Saluran drainase jalan tertanam di berm, di atas box dan tidak terpengaruh'],
       dims: [['Box (dalam)', '0,5 × 0,5'], ['Dinding box', '0,15'], ['Dasar box', 'di atas tanah dasar (tanpa galian)'], ['Jarak antar manhole', '3,7 (tipikal)'], ['Sayap', '30°, panjang ≈ 2,0 (sampai kaki timbunan)'], ['Kepala dari as jalan', '16,75'], ['Atap box ke dasar saluran jalan', '≥ 0,2']] }) }

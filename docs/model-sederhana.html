@@ -1,0 +1,263 @@
+<meta charset="utf-8"><title>Model Sederhana Struktur Silang</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script type="importmap">{ "imports": { "three": "../vendor/three.module.min.js", "three/addons/": "../vendor/" } }</script>
+<style>
+/* Tata letak: kanvas 3D penuh, panel keterangan di kanan (di bawah pada layar sempit). Satu tampilan gelap, seperti lembar gambar teknik. */
+:root{--bg:#0d141b;--panel:#121c26;--line:#25364a;--fg:#e6edf3;--muted:#8da2b6;--acc:#38bdf8;--warn:#f59e0b;--ok:#34d399;
+ --sans:'IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 var(--sans);display:flex;flex-direction:column}
+header{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.01em}
+h1 small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}
+button{font:inherit;font-size:13px;color:var(--fg);background:#17222e;border:1px solid var(--line);border-radius:6px;padding:6px 11px;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+button.on{background:var(--acc);border-color:var(--acc);color:#06222f;font-weight:600}
+.tools{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px}
+#stage{position:relative;min-width:0;min-height:320px}
+#gl{position:absolute;inset:0;width:100%;height:100%;display:block}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.tg{position:absolute;transform:translate(-50%,-100%);background:#0b1118ee;border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:4px;padding:1px 7px;font-size:11.5px;white-space:nowrap}
+aside{border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:14px 16px;min-width:0}
+aside h2{font-size:14px;margin:0 0 4px}
+aside .sub{color:var(--muted);font-size:12px;margin:0 0 12px}
+aside h3{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:14px 0 6px;font-weight:500}
+ol,ul{margin:0;padding-left:20px}li{margin:3px 0}
+.dim{font-family:var(--mono);font-size:12px;width:100%;border-collapse:collapse}
+.dim td{padding:3px 0;border-bottom:1px dashed var(--line);vertical-align:top}.dim td:last-child{text-align:right;color:var(--acc);white-space:nowrap;padding-left:10px}
+.ask{border:1px solid var(--warn);border-radius:6px;padding:8px 10px;color:#fcd9a0;font-size:12.5px;margin-top:12px}
+@media (max-width:860px){main{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(55vh,1fr) auto}aside{border-left:0;border-top:1px solid var(--line)}.tools{margin-left:0}}
+</style>
+<header>
+  <h1>Model Sederhana Struktur Silang<small>Untuk dikoreksi sebelum masuk ke 3D Section · satuan meter</small></h1>
+  <nav class="tabs" id="tabs"></nav>
+  <div class="tools">
+    <button id="bX" title="Tanah dibuat tembus pandang">Tembus tanah</button>
+    <button id="bL" class="on">Label</button>
+    <button data-cam="iso">Isometrik</button><button data-cam="top">Atas</button><button data-cam="side">Samping</button>
+  </div>
+</header>
+<main>
+  <div id="stage"><canvas id="gl"></canvas><div id="labels"></div></div>
+  <aside id="info"></aside>
+</main>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/OrbitControls.js';
+
+// ---------- parameter (semua asumsi ada di sini)
+const P = { Hc: 2.5, a: 10.5, yb: 1.0, bermW: 2.5, xc: 14.75, bw: 4.0, bed: -0.5, X: 24, Z: 14, cell: 0.25,
+  ditchW: 1.0, ditchH: 1.0, tw: 0.25, bIn: 1.0, hIn: 0.8, bt: 0.25, wallT: 0.2 };
+P.xb0 = P.a + 2 * (P.Hc - P.yb); P.xb1 = P.xb0 + P.bermW; P.xt = P.xb1 + 2 * P.yb;
+const hAt = x => { x = Math.abs(x); if (x <= P.a) return P.Hc; if (x <= P.xb0) return P.Hc - (x - P.a) / 2; if (x <= P.xb1) return P.yb; if (x <= P.xt) return P.yb - (x - P.xb1) / 2; return 0; };
+
+// ---------- three dasar
+const cv = document.getElementById('gl');
+const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0d141b); scene.fog = new THREE.Fog(0x0d141b, 90, 190);
+const cam = new THREE.PerspectiveCamera(42, 1, 0.1, 400);
+const ctl = new OrbitControls(cam, cv); ctl.enableDamping = true; ctl.maxPolarAngle = Math.PI * 0.96;
+scene.add(new THREE.HemisphereLight(0xdfeaff, 0x3a3026, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(-20, 40, -25); scene.add(sun);
+
+const M = (c, o = {}) => new THREE.MeshLambertMaterial(Object.assign({ color: c, side: THREE.DoubleSide }, o));
+const MATS = { earth: M(0xffffff, { vertexColors: true, flatShading: true }), pav: M(0x2a2f36), shoulder: M(0x7c838c), ditch: M(0x4aa3d6), talang: M(0xf08a3a), trans: M(0xd9c24a),
+  siphon: M(0xe0533d), conc: M(0xb9bec4), wing: M(0xd7dbe0), culvert: M(0x9aa3ad), cross: M(0xd8b36a), water: M(0x2f7fe0, { transparent: true, opacity: 0.75 }), iron: M(0x4a525c), bore: M(0x0a0f14) };
+const EDGE = new THREE.LineBasicMaterial({ color: 0x0a0f14, transparent: true, opacity: 0.45 });
+let G = new THREE.Group(); scene.add(G); let xray = false; const labels = [];
+
+function addMesh(geo, mat, edges = true) {
+  const m = new THREE.Mesh(geo, mat); G.add(m);
+  if (edges) { const l = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), EDGE); G.add(l); }
+  return m;
+}
+const box = (x0, x1, y0, y1, z0, z1, mat) => { if (x1 < x0) [x0, x1] = [x1, x0]; if (z1 < z0) [z0, z1] = [z1, z0];
+  const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return addMesh(g, mat); };
+
+// profil (x,y) diekstrusi sepanjang z (dinding penahan mengikuti lereng)
+function profileWall(pts, z0, z1, mat) {
+  const s = new THREE.Shape(pts.map(p => new THREE.Vector2(p[0], p[1])));
+  const g = new THREE.ExtrudeGeometry(s, { depth: Math.abs(z1 - z0), bevelEnabled: false }); g.translate(0, 0, Math.min(z0, z1)); return addMesh(g, mat);
+}
+// dinding miring bebas (pelan 2D p0->p1, tebal t, tinggi atas linear)
+function skewWall(p0, p1, t, yb, yt0, yt1, mat) {
+  const dx = p1[0] - p0[0], dz = p1[1] - p0[1], L = Math.hypot(dx, dz), nx = -dz / L * t / 2, nz = dx / L * t / 2;
+  const A = [p0[0] + nx, p0[1] + nz], B = [p0[0] - nx, p0[1] - nz], C = [p1[0] - nx, p1[1] - nz], D = [p1[0] + nx, p1[1] + nz];
+  const V = [[A, yb], [B, yb], [C, yb], [D, yb], [A, yt0], [B, yt0], [C, yt1], [D, yt1]].map(([q, y]) => [q[0], y, q[1]]);
+  const F = [[0,1,2,3],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]], pos = [];
+  for (const f of F) for (const k of [0,1,2,0,2,3]) pos.push(...V[f[k]]);
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return addMesh(g, mat);
+}
+// kotak yang menelusuri jalur (z, y dasar) sepanjang z pada x = cx
+function sweepBox(cx, w, h, path, mat) {
+  const pos = [], ring = ([z, y]) => [[cx - w / 2, y, z], [cx + w / 2, y, z], [cx + w / 2, y + h, z], [cx - w / 2, y + h, z]];
+  for (let i = 0; i < path.length - 1; i++) { const a = ring(path[i]), b = ring(path[i + 1]);
+    for (let k = 0; k < 4; k++) { const k2 = (k + 1) % 4; for (const q of [a[k], a[k2], b[k2], a[k], b[k2], b[k]]) pos.push(...q); } }
+  for (const [r, rev] of [[ring(path[0]), 0], [ring(path[path.length - 1]), 1]]) for (const k of [0, 1, 2, 0, 2, 3]) pos.push(...r[k]);
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return addMesh(g, mat);
+}
+function label(text, x, y, z, hue) { labels.push({ text, v: new THREE.Vector3(x, y, z), hue }); }
+
+// ---------- tanah (heightfield kolom, dinding tegak di tepi galian)
+function earth(cutFn) {
+  const c = P.cell, nx = Math.round(2 * P.X / c), nz = Math.round(2 * P.Z / c), yBot = -2.5;
+  const cutAt = (i, j) => (i < 0 || j < 0 || i >= nx || j >= nz) ? undefined : cutFn(-P.X + (i + .5) * c, -P.Z + (j + .5) * c);
+  const pos = [], col = [], clr = (r, g, b) => { for (let k = 0; k < 6; k++) col.push(r, g, b); };
+  const quad = (p, q, r, s) => { for (const v of [p, q, r, p, r, s]) pos.push(...v); };
+  const GR = [0.36, 0.55, 0.25], FL = [0.74, 0.58, 0.38], CU = [0.5, 0.38, 0.26], WL = [0.52, 0.4, 0.28];
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+    const x0 = -P.X + i * c, x1 = x0 + c, z0 = -P.Z + j * c, z1 = z0 + c, cut = cutAt(i, j);
+    const hh = x => cut !== null && cut !== undefined ? cut : hAt(x), h0 = hh(x0), h1 = hh(x1);
+    quad([x0, h0, z0], [x1, h1, z0], [x1, h1, z1], [x0, h0, z1]);
+    const xm = (x0 + x1) / 2; clr(...(cut !== null && cut !== undefined ? CU : (hAt(xm) > 0.02 ? FL : GR)));
+    const nb = [[i - 1, j, 'x0'], [i + 1, j, 'x1'], [i, j - 1, 'z0'], [i, j + 1, 'z1']];
+    for (const [ni, nj, side] of nb) {
+      const ncut = cutAt(ni, nj), mine = cut !== null && cut !== undefined, out = ncut === undefined, theirs = !out && ncut !== null;
+      let wall = false, base;
+      if (out) { wall = true; base = yBot; } else if (!mine && theirs) { wall = true; base = ncut; }
+      if (!wall) continue;
+      const hA = side === 'z1' || side === 'z0' ? [hh(x0), hh(x1)] : [hh(side === 'x0' ? x0 : x1), hh(side === 'x0' ? x0 : x1)];
+      let P0, P1;
+      if (side === 'x0') { P0 = [x0, z0]; P1 = [x0, z1]; } else if (side === 'x1') { P0 = [x1, z0]; P1 = [x1, z1]; }
+      else if (side === 'z0') { P0 = [x0, z0]; P1 = [x1, z0]; } else { P0 = [x0, z1]; P1 = [x1, z1]; }
+      quad([P0[0], base, P0[1]], [P1[0], base, P1[1]], [P1[0], hA[1], P1[1]], [P0[0], hA[0], P0[1]]); clr(...WL);
+    }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.computeVertexNormals();
+  const m = new THREE.Mesh(g, MATS.earth); m.userData.earth = true; G.add(m);
+}
+
+// jalan: lapis perkerasan, bahu, marka tengah
+function road() {
+  box(-9, 9, P.Hc, P.Hc + 0.05, -P.Z, P.Z, MATS.pav); box(-P.a, -9, P.Hc, P.Hc + 0.03, -P.Z, P.Z, MATS.shoulder); box(9, P.a, P.Hc, P.Hc + 0.03, -P.Z, P.Z, MATS.shoulder);
+  box(-0.08, 0.08, P.Hc + 0.05, P.Hc + 0.06, -P.Z, P.Z, M(0xf2cf2e));
+}
+// saluran drainase U (bentang z0..z1) pada sisi s
+function ditch(s, z0, z1, mat, water = true) {
+  const xc = s * P.xc, w = P.ditchW, t = P.tw, y = P.yb;
+  box(xc - w / 2, xc + w / 2, y, y + 0.2, z0, z1, mat);
+  box(xc - w / 2, xc - w / 2 + t, y + 0.2, y + P.ditchH, z0, z1, mat); box(xc + w / 2 - t, xc + w / 2, y + 0.2, y + P.ditchH, z0, z1, mat);
+  if (water) box(xc - w / 2 + t, xc + w / 2 - t, y + 0.2, y + 0.55, z0, z1, MATS.water);
+}
+// saluran irigasi terbuka (kedua sisi): dinding tepi mengikuti lereng 1:2 dari kepala ke luar
+function canal(xh) {
+  const hw = P.bw / 2, T = P.wallT;
+  for (const s of [-1, 1]) {
+    const pts = []; const xs = [xh]; for (const x of [P.a, P.xb0, P.xb1, P.xt]) if (x > xh) xs.push(x); xs.push(P.X);
+    const top = x => Math.max(hAt(x), 0.2);
+    const prof = [[xh, P.bed - 0.2]].concat(xs.map(x => [x, top(x)]), [[P.X, P.bed - 0.2]]);
+    for (const zs of [-1, 1]) {
+      const z0 = zs * hw, z1 = zs * (hw + T);
+      const poly = prof.map(([x, y]) => [s * x, y]); if (s < 0) poly.reverse();
+      profileWall(poly, z0, z1, MATS.wing);
+    }
+    box(s * xh, s * P.X, P.bed, P.bed + 0.35, -hw, hw, MATS.water);
+  }
+}
+// gorong-gorong irigasi: barrel melintang jalan + kepala pada x = xh
+function irrigCulvert(xh) {
+  const hw = P.bw / 2 + P.wallT, hi = P.bIn / 2, yb0 = P.bed - P.bt, yTopIn = P.bed + P.hIn, yTop = yTopIn + P.bt, ho = hi + P.bt, ht = 0.3;
+  box(-(xh - ht), xh - ht, yb0, P.bed, -ho, ho, MATS.culvert);
+  box(-(xh - ht), xh - ht, P.bed, yTopIn, hi, ho, MATS.culvert); box(-(xh - ht), xh - ht, P.bed, yTopIn, -ho, -hi, MATS.culvert);
+  box(-(xh - ht), xh - ht, yTopIn, yTop, -ho, ho, MATS.culvert);
+  box(-(xh - ht), xh - ht, P.bed, P.bed + 0.35, -hi, hi, MATS.water);
+  for (const s of [-1, 1]) {                     // kepala (dinding kepala) dengan bukaan barrel
+    const yH = Math.max(hAt(xh), yTop + 0.1), x0 = s * (xh - ht), x1 = s * xh;
+    box(x0, x1, yb0, P.bed, -hw, hw, MATS.conc);
+    box(x0, x1, P.bed, yH, hi, hw, MATS.conc); box(x0, x1, P.bed, yH, -hw, -hi, MATS.conc);
+    box(x0, x1, yTopIn, yH, -hi, hi, MATS.conc);
+  }
+}
+const bothSides = f => { for (const s of [-1, 1]) f(s); };
+
+// ---------- skenario
+const cutCanal = xh => (x, z) => (Math.abs(x) >= xh && Math.abs(z) <= P.bw / 2 + 1e-6) ? P.bed : null;
+const SCENES = {
+  irig: { tab: 'Gorong-gorong irigasi · tanpa talang', build() {
+    const xh = P.xb1; earth(cutCanal(xh)); road(); canal(xh); irrigCulvert(xh);
+    bothSides(s => ditch(s, -P.Z, P.Z, MATS.ditch));
+    label('Badan jalan', 0, P.Hc + 0.3, -6); label('Timbunan lereng 1:2', 12.2, 1.9, -7); label('Saluran drainase (di atas timbunan, menerus)', P.xc, 2.3, -8.5, 'ditch');
+    label('Kepala gorong-gorong', xh, 1.3, -2.5, 'conc'); label('Sayap / dinding penahan sejajar lereng 1:2', 17.2, 0.9, 2.5, 'conc'); label('Saluran irigasi terbuka', 21, 0.2, 0);
+    label('Barrel gorong-gorong irigasi', 6, 0.9, 0, 'culvert'); },
+    info: { title: 'Skenario 1 · gorong-gorong irigasi tanpa talang', sub: 'Berlaku di O5 (8+339,85), O7 (11+625,23), O8 (14+055,87): di Skenario 1 tidak ada talang.',
+      order: ['Saluran irigasi terbuka', 'Sayap / dinding penahan, sejajar lereng timbunan 1:2', 'Kepala gorong-gorong (di tepi berm)', 'Timbunan', 'Saluran drainase jalan, <b>di atas timbunan</b> dan menerus (tidak masuk talang)'],
+      dims: [['Gorong-gorong irigasi (dalam)', '1,0 × 0,8'], ['Tebal dinding gorong-gorong', '0,25'], ['Lebar saluran irigasi', '4,0'], ['Dasar saluran irigasi', '0,5 di bawah tanah'], ['Kepala dari as jalan', '16,0 (tepi berm)'], ['Lereng timbunan', '1 : 2'], ['Berm saluran drainase', '2,5'], ['Saluran drainase (luar)', '1,0 × 1,0']] } },
+  talang: { tab: 'Talang (Skenario 1)', build() {
+    const xh = 11.5; earth(cutCanal(xh)); road(); canal(xh); irrigCulvert(xh);
+    bothSides(s => { ditch(s, -P.Z, -3, MATS.ditch); ditch(s, 3, P.Z, MATS.ditch); ditch(s, -3, 3, MATS.talang); });
+    label('Kepala gorong-gorong ditarik ke dalam', xh, 2.6, -2.5, 'conc'); label('Talang di luar kepala, di atas saluran irigasi', P.xc, 2.55, 0, 'talang'); label('Dinding penahan (tumpuan talang)', 14.0, 0.8, 2.6, 'conc');
+    label('Saluran irigasi terbuka (di bawah talang)', 20.5, 0.2, 0); label('Saluran drainase di berm', P.xc, 2.3, -8, 'ditch'); label('Timbunan lereng 1:2', 12.4, 1.9, 7); },
+    info: { title: 'Skenario 1 · talang di atas saluran irigasi', sub: 'Berlaku di O4 (6+283,89), O6 (9+942,90 s.d. 9+949,90), O9 (14+714,76 s.d. 14+729,00).',
+      order: ['Saluran irigasi terbuka', 'Dinding penahan sejajar lereng 1:2, <b>menjadi tumpuan talang</b>', 'Talang (saluran drainase kotak) melintas di atas saluran irigasi', 'Kepala gorong-gorong <b>lebih ke dalam</b> (dekat jalan)', 'Timbunan'],
+      dims: [['Kepala dari as jalan', '11,5'], ['Talang (luar)', '1,0 × 1,0'], ['Bentang talang (ke tumpuan)', '5,6'], ['Lebar saluran irigasi', '4,0'], ['Dasar talang = dasar saluran drainase', '1,0 di atas tanah']] } },
+  siphon: { tab: 'Siphon (Skenario 2)', build() {
+    const xh = 11.5; earth(cutCanal(xh)); road(); canal(xh); irrigCulvert(xh);
+    const top = 1.0, low = P.bed - 0.3 - 0.95, ramp = 6.0, hf = P.bw / 2 + P.wallT;
+    const path = [[-hf - ramp, top], [-hf, low], [hf, low], [hf + ramp, top]];
+    bothSides(s => { ditch(s, -P.Z, -hf - ramp - 3, MATS.ditch); ditch(s, -hf - ramp - 3, -hf - ramp, MATS.trans); ditch(s, hf + ramp, hf + ramp + 3, MATS.trans); ditch(s, hf + ramp + 3, P.Z, MATS.ditch);
+      sweepBox(s * P.xc, 0.8, 0.95, path, MATS.siphon); });
+    label('Saluran U → transisi kotak', P.xc, 2.35, -hf - ramp - 1.5, 'trans'); label('Siphon turun sebelum saluran irigasi', P.xc, 1.2, -5.3, 'siphon'); label('Siphon mendatar di bawah dasar saluran irigasi', P.xc, -1.0, 0, 'siphon');
+    label('Siphon naik setelah saluran irigasi', P.xc, 1.2, 5.3, 'siphon'); label('Saluran irigasi terbuka', 20.5, 0.2, 0); label('Kepala gorong-gorong', xh, 2.6, -2.5, 'conc'); },
+    info: { title: 'Skenario 2 · siphon di bawah saluran irigasi', sub: 'Berlaku di O5 (8+339,85), O6 (9+942,90), O7 (11+625,23), O8 (14+064,93), O9 (14+714,76).',
+      order: ['Saluran U → transisi (kotak, 3 m)', 'Box siphon <b>turun</b> sebelum bertemu saluran irigasi', 'Mendatar di bawah dasar saluran irigasi (atap box 0,3 di bawah dasar saluran)', 'Box <b>naik</b> setelah melewati saluran irigasi', 'Transisi → saluran U kembali'],
+      dims: [['Box siphon (luar)', '0,8 × 0,95'], ['Dinding box', '0,2'], ['Kemiringan turun / naik', '≈ 1 : 2,2'], ['Awal turun dari tepi saluran', '6,0 sebelum'], ['Atap box di bawah dasar saluran', '0,3'], ['Transisi', '3,0']],
+      ask: 'Panjang siphon di xlsx hanya 7 m (O6) dan 4–8 m (O9), tidak cukup untuk ramp 1 : 2,2. Pilih: ramp lebih curam (1 : 1,5) atau siphon dibuat lebih panjang dari data?' } },
+  cross: { tab: 'Gorong-gorong kawasan (cross drain)', build() {
+    const inner = 0.5, wt = 0.15, ho = inner / 2 + wt, yIn = -0.3, yb0 = yIn - wt, yTop = yIn + inner + wt, xhead = 17.25;
+    earth((x, z) => (Math.abs(x) >= xhead && Math.abs(z) <= Math.min(1.65, ho + (Math.abs(x) - xhead) * 0.577)) ? yIn : null); road();
+    bothSides(s => ditch(s, -P.Z, P.Z, MATS.ditch));
+    box(-(xhead - 0.3), xhead - 0.3, yb0, yIn, -ho, ho, MATS.cross); box(-(xhead - 0.3), xhead - 0.3, yIn, yTop - wt, ho - wt, ho, MATS.cross); box(-(xhead - 0.3), xhead - 0.3, yIn, yTop - wt, -ho, -ho + wt, MATS.cross); box(-(xhead - 0.3), xhead - 0.3, yTop - wt, yTop, -ho, ho, MATS.cross);
+    box(-(xhead - 0.3), xhead - 0.3, yIn, yIn + 0.2, -inner / 2, inner / 2, MATS.water);
+    for (const s of [-1, 1]) {
+      const x0 = s * (xhead - 0.3), x1 = s * xhead, yH = hAt(xhead) + 0.05;
+      box(x0, x1, yb0, yIn, -0.9, 0.9, MATS.conc); box(x0, x1, yIn, yH, inner / 2, 0.9, MATS.conc); box(x0, x1, yIn, yH, -0.9, -inner / 2, MATS.conc); box(x0, x1, yIn + inner, yH, -inner / 2, inner / 2, MATS.conc);
+      for (const zs of [-1, 1]) skewWall([s * xhead, zs * 0.9], [s * (xhead + 2.5 * Math.cos(Math.PI / 6)), zs * (0.9 + 2.5 * Math.sin(Math.PI / 6))], 0.2, yb0, yH, 0.1, MATS.wing);
+      const mx = s * 2.4; box(mx - 0.55, mx + 0.55, yTop, P.Hc, -0.55, 0.55, MATS.conc); box(mx - 0.3, mx + 0.3, P.Hc, P.Hc + 0.06, -0.3, 0.3, MATS.iron);
+    }
+    label('Kepala gorong-gorong di kaki timbunan', 17.25, 0.9, -1.2, 'conc'); label('Sayap 30°', 18.6, 0.5, 1.9, 'conc'); label('Box 0,5 × 0,5 melintang jalan', 8, 0.7, 0, 'cross'); label('Manhole (tutup besi cor)', 2.4, 2.8, 0.9, 'iron');
+    label('Saluran drainase jalan tidak terganggu', P.xc, 2.3, -8, 'ditch'); label('Timbunan lereng 1:2', 12.4, 1.9, 7); },
+    info: { title: 'Gorong-gorong kawasan · Skenario 1', sub: 'Tipikal TIPIKAL_GORONG_GORONG.dxf: box 0,5 × 0,5, beton f\'c 30 MPa, manhole besi cor di atas, kepala dengan sayap.',
+      order: ['Sayap (30° terhadap sumbu gorong-gorong)', 'Kepala gorong-gorong di kaki timbunan', 'Timbunan', 'Saluran drainase jalan di berm, <b>di atas</b> gorong-gorong dan tidak terpengaruh'],
+      dims: [['Box (dalam)', '0,5 × 0,5'], ['Dinding box', '0,15'], ['Dasar dalam', '0,3 di bawah tanah'], ['Jarak antar manhole', '3,7 (tipikal)'], ['Sayap', '30°, panjang 2,5'], ['Jarak atap box ke dasar saluran jalan', '≥ 0,65']],
+      ask: 'Elevasi di daftar Anda saya anggap dasar dalam gorong-gorong. Benar, atau itu elevasi tanah?' } }
+};
+
+// ---------- UI
+const tabs = document.getElementById('tabs'), info = document.getElementById('info'), labelsEl = document.getElementById('labels');
+let cur = null, tagEls = [];
+function show(k) {
+  if (!SCENES[k]) k = 'irig'; cur = k;
+  scene.remove(G); G.traverse(o => { if (o.geometry) o.geometry.dispose(); }); G = new THREE.Group(); scene.add(G); labels.length = 0;
+  xray = (k === 'siphon' || k === 'cross'); SCENES[k].build(); applyXray();
+  tagEls.forEach(e => e.remove()); tagEls = labels.map(l => { const e = document.createElement('div'); e.className = 'tg'; e.textContent = l.text; const c = l.hue && MATS[l.hue] ? '#' + MATS[l.hue].color.getHexString() : null; if (c) e.style.borderLeftColor = c; labelsEl.appendChild(e); return e; });
+  [...tabs.children].forEach(b => b.classList.toggle('on', b.dataset.k === k));
+  const I = SCENES[k].info;
+  info.innerHTML = `<h2>${I.title}</h2><p class="sub">${I.sub}</p><h3>Urutan dari luar ke arah jalan</h3><ol>${I.order.map(t => `<li>${t}</li>`).join('')}</ol><h3>Dimensi asumsi (m)</h3><table class="dim">${I.dims.map(d => `<tr><td>${d[0]}</td><td>${d[1]}</td></tr>`).join('')}</table>${I.ask ? `<div class="ask"><b>Perlu keputusan:</b> ${I.ask}</div>` : ''}`;
+  try { history.replaceState(null, '', '#' + k); } catch (e) {}
+}
+for (const k in SCENES) { const b = document.createElement('button'); b.textContent = SCENES[k].tab; b.dataset.k = k; b.onclick = () => show(k); tabs.appendChild(b); }
+function applyXray() { MATS.earth.transparent = xray; MATS.earth.opacity = xray ? 0.16 : 1; MATS.earth.depthWrite = !xray; MATS.earth.needsUpdate = true; document.getElementById('bX').classList.toggle('on', xray); }
+document.getElementById('bX').onclick = () => { xray = !xray; applyXray(); };
+let showLbl = true; document.getElementById('bL').onclick = e => { showLbl = !showLbl; e.currentTarget.classList.toggle('on', showLbl); };
+const CAMS = { iso: [[28, 11, -21], [15, 0.8, 0]], top: [[15, 46, 0.01], [15, 0, 0]], side: [[15, 2.5, -44], [15, 1, 0]] };
+function setCam(k) { const [p, t] = CAMS[k]; cam.position.set(...p); ctl.target.set(...t); ctl.update(); }
+document.querySelectorAll('[data-cam]').forEach(b => b.onclick = () => setCam(b.dataset.cam));
+
+function resize() { const r = cv.parentElement.getBoundingClientRect(); renderer.setSize(r.width, r.height, false); cam.aspect = r.width / r.height; cam.updateProjectionMatrix(); }
+new ResizeObserver(resize).observe(cv.parentElement); resize();
+const tmp = new THREE.Vector3();
+function frame() {
+  ctl.update(); renderer.render(scene, cam);
+  const r = cv.getBoundingClientRect();
+  labels.forEach((l, i) => { const e = tagEls[i]; if (!e) return; tmp.copy(l.v).project(cam); const vis = showLbl && tmp.z < 1 && Math.abs(tmp.x) < 1.05 && Math.abs(tmp.y) < 1.05; e.style.display = vis ? '' : 'none'; if (vis) { e.style.left = (tmp.x * .5 + .5) * r.width + 'px'; e.style.top = (-tmp.y * .5 + .5) * r.height + 'px'; } });
+  requestAnimationFrame(frame);
+}
+addEventListener('hashchange', () => { const k = location.hash.slice(1); if (k in SCENES && k !== cur) show(k); });
+setCam('iso'); show((location.hash || '').slice(1) in SCENES ? location.hash.slice(1) : 'irig'); frame();
+</script>

@@ -487,6 +487,10 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
     segs = collections.defaultdict(dict)
     for f in fr: segs[(f['sk_t'], f['saluran'], f['bagian'])][f['pos']] = f
     sites = find_sites(O, segs)
+    if os.environ.get('DEBUG_SEGS'):
+        for (k_, a_, b_), ps in sorted(segs.items(), key=lambda kv: min(f_['sta'] for f_ in kv[1].values())):
+            sts_ = [f_['sta'] for f_ in ps.values()]
+            print('SEG', O, 'S%d' % k_, a_, b_, round(min(sts_), 2), round(max(sts_), 2), sorted({f_['info'][s__].get('type', '') + '/' + str(f_['info'][s__].get('place', '')) for f_ in ps.values() for s__ in 'US'}))
     zsta = [f['sta'] for f in fr]; zlo, zhi = min(zsta), max(zsta)
     simps = [dict(name=n, sta=v) for n, v in SIMPANG if zlo <= v <= zhi and any(
         min(f_['sta'] for f_ in ps.values()) <= v <= max(f_['sta'] for f_ in ps.values()) for (k_, a_, b_), ps in segs.items() if k_ == 1)]

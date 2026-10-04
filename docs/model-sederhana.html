@@ -22,7 +22,8 @@ main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px}
 #stage{position:relative;min-width:0;min-height:320px}
 #gl{position:absolute;inset:0;width:100%;height:100%;display:block}
 #labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-.tg{position:absolute;transform:translate(-50%,-100%);background:#0b1118ee;border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:4px;padding:1px 7px;font-size:11.5px;white-space:nowrap}
+.tg{position:absolute;white-space:nowrap;font-size:12px;font-weight:500;color:#f2f6fa;padding:0 4px 2px;text-shadow:0 0 3px #000,0 0 6px #000;border-bottom:1.5px solid var(--lc,#e6edf3)}
+#lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
 aside{border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:14px 16px;min-width:0}
 aside h2{font-size:14px;margin:0 0 4px}
 aside .sub{color:var(--muted);font-size:12px;margin:0 0 12px}
@@ -44,7 +45,7 @@ select{font:inherit;font-size:13px;color:var(--fg);background:#17222e;border:1px
   </div>
 </header>
 <main>
-  <div id="stage"><canvas id="gl"></canvas><div id="labels"></div></div>
+  <div id="stage"><canvas id="gl"></canvas><div id="labels"><svg id="lines"></svg></div></div>
   <aside id="info"></aside>
 </main>
 <script type="module">
@@ -78,8 +79,8 @@ function addMesh(geo, mat, edges = true) {
   if (edges) { const l = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), EDGE); G.add(l); }
   return m;
 }
-const box = (x0, x1, y0, y1, z0, z1, mat) => { if (x1 < x0) [x0, x1] = [x1, x0]; if (z1 < z0) [z0, z1] = [z1, z0];
-  const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return addMesh(g, mat); };
+const box = (x0, x1, y0, y1, z0, z1, mat, edges = true) => { if (x1 < x0) [x0, x1] = [x1, x0]; if (z1 < z0) [z0, z1] = [z1, z0];
+  const g = new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0); g.translate((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); return addMesh(g, mat, edges); };
 
 // profil (x,y) diekstrusi sepanjang z (dinding penahan mengikuti lereng)
 function profileWall(pts, z0, z1, mat) {
@@ -106,7 +107,7 @@ function sweepBox(cx, w, h, path, mat) {
 function label(text, x, y, z, hue) { labels.push({ text, v: new THREE.Vector3(x, y, z), hue }); }
 
 // ---------- tanah (heightfield kolom, dinding tegak di tepi galian)
-function earth(cutFn) {
+function earth(cutFn, holes = []) {
   const c = P.cell, nx = Math.round(2 * P.X / c), nz = Math.round(2 * P.Z / c), yBot = -2.5;
   const cutAt = (i, j) => (i < 0 || j < 0 || i >= nx || j >= nz) ? undefined : cutFn(-P.X + (i + .5) * c, -P.Z + (j + .5) * c, -P.X + i * c, -P.X + (i + 1) * c);
   const pos = [], col = [], clr = (r, g, b) => { for (let k = 0; k < 6; k++) col.push(r, g, b); };
@@ -127,6 +128,7 @@ function earth(cutFn) {
       let P0, P1;
       if (side === 'x0') { P0 = [x0, z0]; P1 = [x0, z1]; } else if (side === 'x1') { P0 = [x1, z0]; P1 = [x1, z1]; }
       else if (side === 'z0') { P0 = [x0, z0]; P1 = [x1, z0]; } else { P0 = [x0, z1]; P1 = [x1, z1]; }
+      if ((side === 'x0' || side === 'x1') && holes.some(h => Math.abs(Math.abs(P0[0]) - h.x) < 1e-6 && Math.abs((P0[1] + P1[1]) / 2) < h.hz)) continue;     // bukaan barrel gorong-gorong
       quad([P0[0], base, P0[1]], [P1[0], base, P1[1]], [P1[0], hA[1], P1[1]], [P0[0], hA[0], P0[1]]); clr(...WL);
     }
   }
@@ -192,11 +194,11 @@ function canal(xh, notch) {
 }
 // gorong-gorong irigasi: barrel melintang jalan + kepala pada x = xh
 function irrigCulvert(xh) {
-  const hw = P.bw / 2 + P.wallT, hi = P.bIn / 2, yb0 = P.bed - P.bt, yTopIn = P.bed + P.hIn, yTop = yTopIn + P.bt, ho = hi + P.bt, ht = 0.3;
+  const hw = P.bw / 2 + P.wallT, hi = P.bIn / 2, yb0 = P.bed - P.bt, yTopIn = P.bed + P.hIn, yTop = yTopIn + P.bt, ho = hi + P.bt, ht = 0.25;
   box(-(xh - ht), xh - ht, yb0, P.bed, -ho, ho, MATS.culvert);
   box(-(xh - ht), xh - ht, P.bed, yTopIn, hi, ho, MATS.culvert); box(-(xh - ht), xh - ht, P.bed, yTopIn, -ho, -hi, MATS.culvert);
   box(-(xh - ht), xh - ht, yTopIn, yTop, -ho, ho, MATS.culvert);
-  box(-(xh - ht), xh - ht, P.bed, P.bed + 0.35, -hi, hi, MATS.water);
+  liner(-(xh - ht), xh - ht, P.bed, yTopIn, -hi, hi); box(-(xh - ht), xh - ht, P.bed + 0.012, P.bed + 0.35, -hi + 0.012, hi - 0.012, MATS.water, false);
   for (const s of [-1, 1]) {                     // kepala (dinding kepala) dengan bukaan barrel
     const yH = Math.max(hAt(xh), yTop + 0.1), x0 = s * (xh - ht), x1 = s * xh;
     box(x0, x1, yb0, P.bed, -hw, hw, MATS.conc);
@@ -207,7 +209,8 @@ function irrigCulvert(xh) {
 const bothSides = f => { for (const s of [-1, 1]) f(s); };
 const cutCanal = xh => (x, z) => (Math.abs(x) >= xh && Math.abs(z) <= P.bw / 2 + 1e-6) ? P.bed : null;
 const cutBoth = canalFn => (x, z, x0, x1) => { const r = canalFn ? canalFn(x, z) : null; return r !== null && r !== undefined ? r : chanCut(x0, x1, z); };
-const BOX = RING.box;
+const BOX = RING.box, HOLE = xh => [{ x: xh - 0.25, hz: P.bIn / 2 + P.bt - 0.01 }];
+const liner = (x0, x1, y0, y1, z0, z1) => { const e = 0.012; box(x0, x1, y0, y0 + e, z0, z1, MATS.bore, false); box(x0, x1, y1 - e, y1, z0, z1, MATS.bore, false); box(x0, x1, y0, y1, z0, z0 + e, MATS.bore, false); box(x0, x1, y0, y1, z1 - e, z1, MATS.bore, false); };
 
 // ---------- skenario
 const TRAPS = [
@@ -220,7 +223,7 @@ const ST = { trap: 1, slope: 0 };
 const trLen = r => Math.min(5, Math.max(2, 2.5 * (r.top - 1.0)));      // panjang transisi 2–5 m menurut lebar atas trapesium
 const SCENES = {
   irig: { tab: 'Gorong-gorong irigasi · tanpa talang', build() {
-    const xh = P.xb1; chanSeg(-P.Z, P.Z, BOX, BOX, MATS.ditch); earth(cutBoth(cutCanal(xh))); road(); canal(xh); irrigCulvert(xh); drawChannels();
+    const xh = P.xb1; chanSeg(-P.Z, P.Z, BOX, BOX, MATS.ditch); earth(cutBoth(cutCanal(xh - 0.25)), HOLE(xh)); road(); canal(xh - 0.25); irrigCulvert(xh); drawChannels();
     label('Badan jalan', 0, P.Hc + 0.3, -6); label('Timbunan lereng 1:2', 11, 2.1, -7); label('Saluran drainase (tertanam di timbunan, menerus)', P.xc, 2.2, -8.5, 'ditch');
     label('Kepala gorong-gorong', xh, 2.3, -2.5, 'conc'); label('Sayap / dinding penahan sejajar lereng 1:2', 17.2, 0.9, 2.5, 'conc'); label('Saluran irigasi terbuka', 21, 0.2, 0);
     label('Barrel gorong-gorong irigasi', 6, 0.9, 0, 'culvert'); },
@@ -230,7 +233,7 @@ const SCENES = {
   talang: { tab: 'Talang (Skenario 1)', build() {
     const xh = 11.0, hf = P.bw / 2 + P.wallT + 0.6;
     chanSeg(-P.Z, -hf, BOX, BOX, MATS.ditch); chanSeg(-hf, hf, BOX, BOX, MATS.talang); chanSeg(hf, P.Z, BOX, BOX, MATS.ditch);
-    earth(cutBoth(cutCanal(xh))); road(); canal(xh, [P.xc - 0.5, P.xc + 0.5, P.yb - 1.0]); irrigCulvert(xh); drawChannels();
+    earth(cutBoth(cutCanal(xh - 0.25)), HOLE(xh)); road(); canal(xh - 0.25, [P.xc - 0.5, P.xc + 0.5, P.yb - 1.0]); irrigCulvert(xh); drawChannels();
     label('Kepala gorong-gorong ditarik ke dalam', xh, 2.7, -2.5, 'conc'); label('Talang di luar kepala, di atas saluran irigasi', P.xc, 2.35, 0, 'talang'); label('Dinding penahan (tumpuan talang)', 12.0, 1.2, 2.6, 'conc');
     label('Saluran irigasi terbuka (di bawah talang)', 20.5, 0.2, 0); label('Saluran drainase tertanam di berm', P.xc, 2.2, -8, 'ditch'); label('Timbunan lereng 1:2', 11, 2.1, 7); },
     info: () => ({ title: 'Skenario 1 · talang di atas saluran irigasi', sub: 'Berlaku di O4 (6+283,89), O6 (9+942,90 s.d. 9+949,90), O9 (14+714,76 s.d. 14+729,00).',
@@ -244,7 +247,7 @@ const SCENES = {
       chanSeg(-P.Z, -zT, R, R, MATS.ditch); chanSeg(-zT, -zT + L, R, BOX, MATS.trans); chanSeg(-zT + L, -rs, BOX, BOX, MATS.ditch);
       chanSeg(rs, zT - L, BOX, BOX, MATS.ditch); chanSeg(zT - L, zT, BOX, R, MATS.trans); chanSeg(zT, P.Z, R, R, MATS.ditch);
     }
-    earth(cutBoth(cutCanal(xh))); road(); canal(xh); irrigCulvert(xh); drawChannels();
+    earth(cutBoth(cutCanal(xh - 0.25)), HOLE(xh)); road(); canal(xh - 0.25); irrigCulvert(xh); drawChannels();
     const path = [[-rs, P.yb - 1.0], [-hf, low], [hf, low], [rs, P.yb - 1.0]];
     bothSides(s => sweepBox(s * P.xc, 1.0, 1.0, path, MATS.siphon));
     if (!sel.box) label('Saluran trapesium', P.xc, 2.6, -zT - 3, 'ditch'), label(`Transisi ${L.toFixed(1).replace('.', ',')} m (trapesium → kotak)`, P.xc, 2.5, -zT + L / 2, 'trans');
@@ -256,16 +259,16 @@ const SCENES = {
         ['Saluran trapesium (tertanam di timbunan)', `<b>Transisi ${L.toFixed(1).replace('.', ',')} m</b> trapesium → kotak, dimulai 10 m sebelum siphon`, `Saluran kotak terbuka ${(10 - L).toFixed(1).replace('.', ',')} m`, 'Box siphon <b>turun curam</b> tepat sebelum saluran irigasi', 'Mendatar di bawah dasar saluran irigasi (atap box 0,3 di bawahnya)', 'Naik setelah saluran irigasi, lalu urutan sama dibalik'],
       dims: [['Box siphon / saluran kotak (luar)', '1,0 × 1,0'], ['Dinding box', '0,25'], ['Kemiringan turun / naik (curam)', SLOPES[ST.slope].n], ['Panjang ramp (dari tepi saluran irigasi)', (SLOPES[ST.slope].k * 2.8).toFixed(1).replace('.', ',')], ['Atap box di bawah dasar saluran', '0,3'], ...(sel.box ? [] : [['Lebar atas trapesium (dalam)', R.top.toFixed(2).replace('.', ',')], ['Panjang transisi (2,5 × (lebar atas − 1,0), 2–5)', L.toFixed(2).replace('.', ',')], ['Awal transisi sebelum siphon', '10,0']])] }; } },
   cross: { tab: 'Gorong-gorong kawasan (cross drain)', build() {
-    const inner = 0.5, wt = 0.15, ho = inner / 2 + wt, yb0 = 0, yIn = wt, yTop = yIn + inner + wt, xhead = P.xt - 2 * 0.9, tan30 = Math.tan(Math.PI / 6), hw0 = 0.9;
+    const inner = 0.5, wt = 0.15, ho = inner / 2 + wt, yb0 = 0, yIn = wt, yTop = yIn + inner + wt, xhead = 16.75, tan30 = Math.tan(Math.PI / 6), hw0 = 0.9;
     chanSeg(-P.Z, P.Z, BOX, BOX, MATS.ditch);
     // area di antara sayap (kepala sampai kaki timbunan) bebas tanah: muka tanah dasar
-    earth(cutBoth((x, z) => (Math.abs(x) >= xhead - 1e-6 && Math.abs(z) <= hw0 + (Math.abs(x) - xhead) * tan30) ? 0 : null)); road(); drawChannels();
-    const X = xhead - 0.3;
+    earth(cutBoth((x, z) => (Math.abs(x) >= xhead - 0.25 && Math.abs(z) <= hw0 + Math.max(0, Math.abs(x) - xhead) * tan30) ? 0 : null), [{ x: xhead - 0.25, hz: ho - 0.01 }]); road(); drawChannels();
+    const X = xhead - 0.25;
     box(-X, X, yb0, yIn, -ho, ho, MATS.cross); box(-X, X, yIn, yTop - wt, ho - wt, ho, MATS.cross); box(-X, X, yIn, yTop - wt, -ho, -ho + wt, MATS.cross); box(-X, X, yTop - wt, yTop, -ho, ho, MATS.cross);
-    box(-X, X, yIn, yIn + 0.2, -inner / 2, inner / 2, MATS.water);
+    liner(-X, X, yIn, yIn + inner, -inner / 2, inner / 2); box(-X, X, yIn + 0.012, yIn + 0.2, -inner / 2 + 0.012, inner / 2 - 0.012, MATS.water, false);
     const N = 8;
     for (const s of [-1, 1]) {
-      const x0 = s * (xhead - 0.3), x1 = s * xhead, yH = hAt(xhead);
+      const x0 = s * (xhead - 0.25), x1 = s * xhead, yH = hAt(xhead);
       box(x0, x1, yb0, yIn, -hw0, hw0, MATS.conc); box(x0, x1, yIn, yH, inner / 2, hw0, MATS.conc); box(x0, x1, yIn, yH, -hw0, -inner / 2, MATS.conc); box(x0, x1, yIn + inner, yH, -inner / 2, inner / 2, MATS.conc);
       for (const zs of [-1, 1]) for (let n = 0; n < N; n++) {                 // sayap 30°: tinggi atas mengikuti lereng, berakhir persis di kaki timbunan
         const xa = xhead + (P.xt - xhead) * n / N, xb = xhead + (P.xt - xhead) * (n + 1) / N;
@@ -277,17 +280,21 @@ const SCENES = {
     label('Saluran drainase jalan tertanam di berm, tidak terganggu', P.xc, 2.2, -8, 'ditch'); label('Timbunan lereng 1:2', 11, 2.1, 7); },
     info: () => ({ title: 'Gorong-gorong kawasan · Skenario 1', sub: 'Tipikal TIPIKAL_GORONG_GORONG.dxf: box 0,5 × 0,5, beton f\'c 30 MPa, manhole besi cor di atas, kepala dengan sayap.',
       order: ['Area di antara sayap <b>bebas tanah</b> (setinggi tanah dasar)', 'Sayap 30°: tinggi atas mengikuti lereng 1:2 dan <b>berakhir persis di ujung timbunan</b>', 'Kepala gorong-gorong, tinggi atasnya sama dengan muka timbunan di titik itu', 'Timbunan menutup box', 'Saluran drainase jalan tertanam di berm, di atas box dan tidak terpengaruh'],
-      dims: [['Box (dalam)', '0,5 × 0,5'], ['Dinding box', '0,15'], ['Dasar box', 'di atas tanah dasar (tanpa galian)'], ['Jarak antar manhole', '3,7 (tipikal)'], ['Sayap', '30°, panjang 2,1 (sampai kaki timbunan)'], ['Kepala dari as jalan', '16,7'], ['Atap box ke dasar saluran jalan', '≥ 0,2']] }) }
+      dims: [['Box (dalam)', '0,5 × 0,5'], ['Dinding box', '0,15'], ['Dasar box', 'di atas tanah dasar (tanpa galian)'], ['Jarak antar manhole', '3,7 (tipikal)'], ['Sayap', '30°, panjang ≈ 2,0 (sampai kaki timbunan)'], ['Kepala dari as jalan', '16,75'], ['Atap box ke dasar saluran jalan', '≥ 0,2']] }) }
 };
 
 // ---------- UI
 const tabs = document.getElementById('tabs'), info = document.getElementById('info'), labelsEl = document.getElementById('labels');
 let cur = null, tagEls = [];
+const linesEl = document.getElementById('lines'), SVGNS = 'http://www.w3.org/2000/svg', OFFS = [[46, -46], [-46, -64], [56, -92], [-56, -34], [40, -22], [-40, -96], [70, -64], [-70, -52]];
 function show(k) {
   if (!SCENES[k]) k = 'irig'; cur = k;
   scene.remove(G); G.traverse(o => { if (o.geometry) o.geometry.dispose(); }); G = new THREE.Group(); scene.add(G); labels.length = 0; CH.length = 0;
   xray = (k === 'siphon' || k === 'cross'); SCENES[k].build(); applyXray();
-  tagEls.forEach(e => e.remove()); tagEls = labels.map(l => { const e = document.createElement('div'); e.className = 'tg'; e.textContent = l.text; const c = l.hue && MATS[l.hue] ? '#' + MATS[l.hue].color.getHexString() : null; if (c) e.style.borderLeftColor = c; labelsEl.appendChild(e); return e; });
+  tagEls.forEach(e => e.remove()); linesEl.innerHTML = '';
+  tagEls = labels.map((l, i) => { const e = document.createElement('div'); e.className = 'tg'; e.textContent = l.text; const c = l.hue && MATS[l.hue] ? '#' + MATS[l.hue].color.getHexString() : '#e6edf3'; e.style.setProperty('--lc', c); labelsEl.appendChild(e);
+    const ln = document.createElementNS(SVGNS, 'line'), dt = document.createElementNS(SVGNS, 'circle'); ln.setAttribute('stroke', c); ln.setAttribute('stroke-width', '1.5'); dt.setAttribute('r', '4'); dt.setAttribute('fill', c); dt.setAttribute('stroke', '#0b1118'); dt.setAttribute('stroke-width', '1.2'); linesEl.append(ln, dt);
+    l.e = e; l.ln = ln; l.dt = dt; l.dx = OFFS[i % OFFS.length][0]; l.dy = OFFS[i % OFFS.length][1]; return e; });
   [...tabs.children].forEach(b => b.classList.toggle('on', b.dataset.k === k));
   const I = SCENES[k].info();
   info.innerHTML = `<h2>${I.title}</h2><p class="sub">${I.sub}</p><h3>Urutan dari luar ke arah jalan</h3><ol>${I.order.map(t => `<li>${t}</li>`).join('')}</ol><h3>Dimensi asumsi (m)</h3><table class="dim">${I.dims.map(d => `<tr><td>${d[0]}</td><td>${d[1]}</td></tr>`).join('')}</table>${I.ask ? `<div class="ask"><b>Perlu keputusan:</b> ${I.ask}</div>` : ''}`;
@@ -309,9 +316,22 @@ const tmp = new THREE.Vector3();
 function frame() {
   ctl.update(); renderer.render(scene, cam);
   const r = cv.getBoundingClientRect();
-  labels.forEach((l, i) => { const e = tagEls[i]; if (!e) return; tmp.copy(l.v).project(cam); const vis = showLbl && tmp.z < 1 && Math.abs(tmp.x) < 1.05 && Math.abs(tmp.y) < 1.05; e.style.display = vis ? '' : 'none'; if (vis) { e.style.left = (tmp.x * .5 + .5) * r.width + 'px'; e.style.top = (-tmp.y * .5 + .5) * r.height + 'px'; } });
+  const items = [];
+  for (const l of labels) {
+    tmp.copy(l.v).project(cam); const vis = showLbl && tmp.z < 1 && Math.abs(tmp.x) < 1.05 && Math.abs(tmp.y) < 1.05;
+    l.e.style.display = l.ln.style.display = l.dt.style.display = vis ? '' : 'none'; if (!vis) continue;
+    const ax = (tmp.x * .5 + .5) * r.width, ay = (-tmp.y * .5 + .5) * r.height; if (!l.w) { l.w = l.e.offsetWidth; l.h = l.e.offsetHeight; }
+    items.push({ l, ax, ay, ex: ax + l.dx, ey: ay + l.dy });
+  }
+  items.sort((p, q) => p.ey - q.ey);                                    // hindari tumpang tindih: geser label ke atas
+  const box_ = it => { const x0 = it.l.dx > 0 ? it.ex : it.ex - it.l.w; return [x0, it.ey - it.l.h, x0 + it.l.w, it.ey]; };
+  for (let k = 0; k < items.length; k++) for (let j = 0; j < k; j++) { const A = box_(items[j]), B = box_(items[k]); if (A[0] < B[2] && B[0] < A[2] && A[1] < B[3] && B[1] < A[3]) items[k].ey = A[1] - 3; }
+  for (const it of items) { const l = it.l, x0 = l.dx > 0 ? it.ex : it.ex - l.w;
+    l.e.style.left = x0 + 'px'; l.e.style.top = (it.ey - l.h) + 'px';
+    l.ln.setAttribute('x1', it.ax); l.ln.setAttribute('y1', it.ay); l.ln.setAttribute('x2', it.ex); l.ln.setAttribute('y2', it.ey); l.dt.setAttribute('cx', it.ax); l.dt.setAttribute('cy', it.ay); }
   requestAnimationFrame(frame);
 }
 addEventListener('hashchange', () => { const k = location.hash.slice(1); if (k in SCENES && k !== cur) show(k); });
+window.__v = { cam, ctl };
 setCam('iso'); show((location.hash || '').slice(1) in SCENES ? location.hash.slice(1) : 'irig'); frame();
 </script>

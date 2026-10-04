@@ -507,13 +507,10 @@ def sip_zones(st, c_):
     a_, b_, sc = st['a'], st['b'], st['sta']; hw = st['bw'] / 2 + WALL; Lr = st['Lr']
     def lrule(h): return 2.0 if h is None else float(np.clip(2.5 * ((h.bounds[2] - h.bounds[0]) - 1.0), 2.0, 5.0))
     LA, LB = lrule(c_['nb']['A'][0]), lrule(c_['nb']['B'][0])
-    if st['simp']:                                               # siphon panjang di bawah mulut simpang: transisi di kedua ujung rentang
-        T0 = a_; T1 = min(a_ + LA, (a_ + b_) / 2 - 0.5); S0 = T1
-        T3 = b_; T2 = max(b_ - LB, (a_ + b_) / 2 + 0.5); S1 = T2
-    else:                                                        # siphon pendek, tepat di sekitar saluran irigasi
-        S0 = max(a_ + 0.1, sc - hw - Lr); S1 = min(b_ - 0.1, sc + hw + Lr)
-        T0 = max(a_, S0 - SIP_PRE); T1 = min(T0 + LA, S0)
-        T3 = min(b_, S1 + SIP_PRE); T2 = max(T3 - LB, S1)
+    if st['simp']: S0 = a_; S1 = b_                              # siphon panjang di bawah mulut simpang: seluruh rentang
+    else: S0 = max(a_ + 0.1, sc - hw - Lr); S1 = min(b_ - 0.1, sc + hw + Lr)      # siphon pendek tepat di sekitar saluran irigasi
+    T0 = S0 - SIP_PRE; T1 = T0 + min(LA, SIP_PRE)                 # transisi mulai SIP_PRE m sebelum siphon: ruas saluran trapesium di gambar dimundurkan
+    T3 = S1 + SIP_PRE; T2 = T3 - min(LB, SIP_PRE)
     return dict(a=a_, b=b_, T0=T0, T1=T1, S0=S0, S1=S1, T2=T2, T3=T3, Lr=min(Lr, (S1 - S0) / 2), LA=LA, LB=LB)
 
 for O in sorted(byO, key=lambda s: int(s[1:])):
@@ -576,10 +573,9 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                         it = SP_FP.intersection(box(st['sta'] - ss_ - st['bw'] / 2 - 1.0, -XL - 1, st['sta'] - ss_ + st['bw'] / 2 + 1.0, XL + 1))
                         if not it.is_empty: xh = max(xh, max(abs(it.bounds[1]), abs(it.bounds[3])) + 2.5)
                 xh = round(min(xh, XL - 4.0), 2)
-                xt = XL - 1.0
-                for xx in np.arange(xh, XL, 0.1):                   # kaki timbunan di sumbu saluran
-                    if ea_['F0'](sg * xx) <= st['ground'] + 0.2: xt = float(xx); break
+                xt = abs(ea_['toeR'] if sg > 0 else ea_['toeL'])           # ujung (kaki) timbunan menurut rencana
                 zz[s_] = xh; zz['Fh' + s_] = round(float(ea_['F0'](sg * xh)), 3); zz['xt' + s_] = round(max(xt, xh + 0.5), 2)
+                zz['Ff' + s_] = round(float(ea_['F0'](sg * (xh + 0.3))), 3); zz['Gt' + s_] = round(float(ea_['G'](sg * zz['xt' + s_])), 3)
             st['zcs'][str(sk_)] = zz
     NB = {}
     for st in sites:
@@ -591,14 +587,29 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                     dd = abs(f['sta'] - tgt)
                     if best is None or dd < best[0]: best = (dd, f)
                 NB[(st['sta'], sk_, key)] = best[1] if best and best[0] < 80 else None
+    SC = {}
+    def sipctx(st_, s_):
+        k_ = (st_['sta'], s_)
+        if k_ not in SC:
+            nbs = {}
+            for key in 'AB':
+                fnb = NB.get((st_['sta'], 2, key))
+                if fnb is not None:
+                    eb = build_frame(fnb, floor); dd_ = {n_: p_ for n_, m_, p_ in eb[0]}; nbs[key] = (eb[1]['hulls'].get(s_), dd_.get(f'chan{s_}0'), dd_.get(f'cwater{s_}'))
+                else: nbs[key] = (None, None, None)
+            ba, bb = st_['bt'][2][s_]
+            if ba is None or bb is None:
+                fn_ = min([f for f in fr if f['sk_t'] == 2] or fr, key=lambda f: abs(f['sta'] - st_['sta'])); ba = bb = fn_['info'][s_].get('bottom') or 53.0
+            SC[k_] = dict(nb=nbs, cx=st_['cx'][s_], ba=ba, bb=bb); SC[k_]['g'] = sip_zones(st_, SC[k_])
+        return SC[k_]
     for st in sites:                                    # ramp siphon curam dekat saluran irigasi; lebar saluran irigasi menyesuaikan panjang rentang siphon
         a_, b_, sc = st['a'], st['b'], st['sta']; bts = st['bt'][2]
         drops = [max(bts[s_][0], bts[s_][1]) - st['dip'] for s_ in 'US' if bts[s_][0] is not None and bts[s_][1] is not None] or [1.2]
         drop = max(0.4, max(drops)); Lr = drop * SIP_K
         if not st['simp']:
-            avail = min(sc - a_, b_ - sc) - 0.3; bw0 = st['bw']; Lmin = 1.0
-            bw = float(np.clip(min(bw0, 2 * (avail - Lr - Lmin) - 2 * WALL), 1.2, bw0)); space = avail - (bw / 2 + WALL)
-            if space < Lr + Lmin: Lr = max(0.3, min(Lr, max(0.5 * drop, space - Lmin)))
+            avail = min(sc - a_, b_ - sc) - 0.2; bw0 = st['bw']
+            bw = float(np.clip(min(bw0, 2 * (avail - Lr) - 2 * WALL), 1.2, bw0)); space = avail - (bw / 2 + WALL)
+            if space < Lr: Lr = max(0.3, space)
             st['bw'] = round(bw, 3)
         st['Lr'] = round(Lr, 3); st['drop'] = round(drop, 3)
     irig = {'sites': sites, 'simpang': [x['name'] + f" @ {x['sta']}" for x in simps], 'zel': []}
@@ -688,6 +699,9 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             ext = st['bw'] / 2 + 1.5
             if st['sta'] + ext > sa_ and st['sta'] - ext < sb_:
                 trench.append((st, ext))
+                zq_ = st['zcs'][str(sk)]; R_ = st['bw'] / 2 + WALL + 0.4 + max(zq_['xtU'] - zq_['U'], zq_['xtS'] - zq_['S']) * math.tan(math.radians(30)) + 0.3
+                for t in np.arange(st['sta'] - R_, st['sta'] + R_ + 1e-6, 0.125):          # area antar sayap (diagonal 30 derajat) halus
+                    if sa_ + 0.01 < t < sb_ - 0.01: T.append(round(float(t), 3))
                 for t in (st['sta'] - st['bw'] / 2 - 0.002, st['sta'] - st['bw'] / 2 + 0.002, st['sta'], st['sta'] + st['bw'] / 2 - 0.002, st['sta'] + st['bw'] / 2 + 0.002):
                     if sa_ + 0.01 < t < sb_ - 0.01: T.append(round(float(t), 3))
         for sp in sp_here:
@@ -695,21 +709,16 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                 if sa_ + 0.01 < t < sb_ - 0.01: T.append(round(float(t), 3))
         if moving:
             for t in np.arange(sa_ + 40.0, sb_ - 20.0, 40.0): T.append(round(float(t), 3))
+        zones_here = []                                   # situs siphon yang zonanya (transisi ... siphon ... transisi) menjangkau segmen ini; Skenario 2 saja
+        if sk == 2:
+            for st_ in sites:
+                cs_ = {s_: sipctx(st_, s_) for s_ in 'US'}
+                z0_ = min(cs_[s_]['g']['T0'] for s_ in 'US'); z1_ = max(cs_[s_]['g']['T3'] for s_ in 'US')
+                if z1_ > sa_ + 0.01 and z0_ < sb_ - 0.01 and (okind == 'siphon' and ovr is st_ or not okind): zones_here.append((st_, cs_))
         tr_ctx = {}
-        if okind == 'siphon':
-            st_ = ovr
+        for st_, cs_ in zones_here:
             for s_ in 'US':
-                nbs = {}
-                for key in 'AB':
-                    fnb = NB.get((st_['sta'], 2, key))
-                    if fnb is not None:
-                        eb = build_frame(fnb, floor); dd_ = {n_: p_ for n_, m_, p_ in eb[0]}; nbs[key] = (eb[1]['hulls'].get(s_), dd_.get(f'chan{s_}0'), dd_.get(f'cwater{s_}'))
-                    else: nbs[key] = (None, None, None)
-                ba, bb = st_['bt'][2][s_]
-                if ba is None or bb is None: ba = bb = secs[0]['info'][s_].get('bottom') or 53.0
-                tr_ctx[s_] = dict(nb=nbs, cx=st_['cx'][s_], ba=ba, bb=bb); tr_ctx[s_]['g'] = sip_zones(st_, tr_ctx[s_])
-            for s_ in 'US':
-                g = tr_ctx[s_]['g']
+                g = cs_[s_]['g']
                 for p_ in (g['T0'], g['T1'], g['S0'], g['S1'], g['T2'], g['T3']):
                     for dd in (-0.02, 0.02):
                         if sa_ + 0.01 < p_ + dd < sb_ - 0.01: T.append(round(float(p_ + dd), 3))
@@ -719,22 +728,22 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
         T = sorted(set(T))
         refined = len(T) > 3
         def hull_at(t, s_):
-            if okind == 'siphon' and s_ in tr_ctx:            # takik terbuka mengikuti: saluran tetangga -> transisi -> kotak terbuka; siphon tertanam tanpa takik
-                c_ = tr_ctx[s_]; g = c_['g']; cx = c_['cx']
+            """takik terbuka pada STA t: saluran tetangga -> transisi -> kotak terbuka; siphon tertanam tanpa takik. None bila di luar zona siphon."""
+            for st_, cs_ in zones_here:
+                c_ = cs_[s_]; g = c_['g']; cx = c_['cx']
                 snap = lambda b_: (b_[0] + 0.03, b_[1], b_[2] - 0.03, b_[3])        # takik sedikit lebih sempit dari beton: tepi galian tersembunyi di dalam dinding beton
                 bu = lambda e0: snap((cx - 0.4 - WALL, e0 - WALL, cx + 0.4 + WALL, e0 + 0.95))
+                if t < g['T0'] or t > g['T3']:
+                    continue
                 if t < g['S0']:
                     hnb = c_['nb']['A'][0]; bn = hnb.bounds if hnb is not None else bu(c_['ba'])
-                    if t < g['T0']: return hnb if hnb is not None else box(*bu(c_['ba']))
                     if t < g['T1']:
                         u = (t - g['T0']) / max(g['T1'] - g['T0'], 1e-6); b0 = bu(c_['ba']); return box(*snap([bn[i] + (b0[i] - bn[i]) * u for i in range(4)]))
                     return box(*bu(c_['ba']))
-                if t <= g['S1']: return None
+                if t <= g['S1']: return 'siphon'
                 hnb = c_['nb']['B'][0]; bn = hnb.bounds if hnb is not None else bu(c_['bb'])
                 if t < g['T2']: return box(*bu(c_['bb']))
-                if t < g['T3']:
-                    u = (g['T3'] - t) / max(g['T3'] - g['T2'], 1e-6); b0 = bu(c_['bb']); return box(*snap([bn[i] + (b0[i] - bn[i]) * u for i in range(4)]))
-                return hnb if hnb is not None else box(*bu(c_['bb']))
+                u = (g['T3'] - t) / max(g['T3'] - g['T2'], 1e-6); b0 = bu(c_['bb']); return box(*snap([bn[i] + (b0[i] - bn[i]) * u for i in range(4)]))
             return None
         def hull_at_orig(t, s_):
             """hull saluran pada STA t: bergeser linear antar potongan (geser hull potongan terdekat)"""
@@ -747,7 +756,15 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             dx = float(np.interp(t, stas, [b_[0] for b_ in bb])) - bb[j][0]; dy = float(np.interp(t, stas, [b_[1] for b_ in bb])) - bb[j][1]
             return affinity.translate(hs_[j], dx, dy)
         def hull_all(t, s_):
-            return hull_at(t, s_) if okind == 'siphon' else hull_at_orig(t, s_)
+            z_ = hull_at(t, s_)
+            if isinstance(z_, str): return None               # siphon tertanam
+            if z_ is not None: return z_
+            if okind == 'siphon':                             # bagian rentang di luar zona siphon: saluran tetangga (trapesium) dilanjutkan
+                for st_, cs_ in zones_here:
+                    c_ = cs_[s_]; g = c_['g']; hnb = c_['nb']['A' if t < g['T0'] else 'B'][0]
+                    if hnb is not None: return hnb
+                return None
+            return hull_at_orig(t, s_)
         def hb(h, x):
             ln = LineString([(x, -1e3), (x, 1e3)]).intersection(h)
             return None if ln.is_empty else ln.bounds[1]
@@ -760,7 +777,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             for i in range(len(xsb) - 1):
                 d0, d1 = Gv[i] - Fv[i], Gv[i+1] - Fv[i+1]
                 if d0 * d1 < 0: grid.add(round(xsb[i] + (xsb[i+1]-xsb[i]) * d0 / (d0 - d1), 4))
-        if moving or okind == 'siphon':          # kolom tepat di sisi takik (hull) tiap stasiun, agar dinding galian tegak dan bersih
+        if moving or okind == 'siphon' or zones_here:          # kolom tepat di sisi takik (hull) tiap stasiun, agar dinding galian tegak dan bersih
             for t in T:
                 for s_, h in hullT[t].items():
                     if h is None: continue
@@ -776,6 +793,8 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                 grid |= {round(sg * xh_, 4), round(sg * xh_ - sg * 1e-3, 4)}
         for st_, _e in trench:
             zz_ = st_['zcs'][str(sk)]
+            for key_, sg_ in (('U', -1), ('S', 1)):
+                for v_ in np.arange(zz_[key_] - 0.25, zz_['xt' + key_] + 0.5, 0.125): grid.add(round(sg_ * float(v_), 4))
             for v_ in (zz_['S'], -zz_['U']): grid |= {round(v_, 4), round(v_ - 1e-3 * (1 if v_ > 0 else -1), 4)}
         grid = {v for v in grid if -XL <= v <= XL}
         grid = sorted(grid); ug = []
@@ -822,7 +841,12 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                     cover = st['zb'] + CH + WALL + 0.25 - 0.5 * max(0.0, abs(t - st['sta']) - (st['bw'] / 2 + WALL))
                     m2 = (np.abs(xa) >= SP_E0) & (np.abs(xa) < zarr)
                     Fv = np.where(m2, np.maximum(Fv, cover), Fv); Vv = np.where(m2, np.maximum(Vv, np.minimum(cover, Fv)), Vv)
-            for st, ext in trench:          # alur saluran irigasi dipotong tegak (ditahan dinding penahan), mulai dari kepala gorong-gorong ke luar
+            for st, ext in trench:          # area di antara sayap kepala gorong-gorong bebas tanah (muka tanah dasar), seperti gorong-gorong kawasan
+                zz = st['zcs'][str(sk)]; hwh_ = st['bw'] / 2 + WALL + 0.4; tg_ = math.tan(math.radians(30)); ax_ = np.abs(xa)
+                for key_, sg_ in (('U', -1), ('S', 1)):
+                    mp_ = (np.sign(xa) == sg_) & (ax_ >= zz[key_] - 1e-9) & (np.abs(t - st['sta']) <= hwh_ + np.maximum(0.0, ax_ - (zz[key_] + 0.3)) * tg_ + 1e-9)
+                    Fv = np.where(mp_, np.minimum(Fv, Gv_t), Fv); Vv = np.where(mp_, np.minimum(Vv, Fv), Vv)
+            for st, ext in trench:          # alur saluran irigasi dipotong tegak, mulai dari kepala gorong-gorong ke luar
                 zz = st['zcs'][str(sk)]; zarr = np.where(xa >= 0, zz['S'], zz['U'])
                 hf = np.where(abs(t - st['sta']) <= st['bw'] / 2, st['zb'], 1e6)
                 m = np.abs(xa) >= zarr - 1e-9
@@ -910,13 +934,39 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
             if hi - lo < 0.02: return
             xs_ = sorted({lo, hi} | {p for p in bps if lo < p < hi})
             elements.append({'k': k, 'm': m, 'xs': [round(v, 3) for v in xs_], 'r': [ring_fn(x_) for x_ in xs_]})
-        if okind == 'siphon':
-            st = ovr
+        def ring_interp(rs, x):
+            j = int(np.clip(np.searchsorted(stas, x) - 1, 0, len(stas) - 2)); A, B = rs[j], rs[j + 1]
+            if A is None and B is None: return None
+            if A is None: return B
+            if B is None: return A
+            u = 0.0 if stas[j + 1] <= stas[j] else float(np.clip((x - stas[j]) / (stas[j + 1] - stas[j]), 0, 1))
+            return [[round(a_ + (b_ - a_) * u, 3) for a_, b_ in zip(ra, rb)] for ra, rb in zip(A, B)]
+        if okind != 'siphon' and zones_here:              # saluran tetangga (trapesium / U-ditch) dimundurkan: ruas yang dipakai transisi dan siphon dipangkas
+            new_el = []
+            for el in elements:
+                k_ = el['k']; side = next((s_ for s_ in 'US' if k_.startswith('chan' + s_) or k_ == 'cwater' + s_), None)
+                if side is None or 'xs' in el or 'r' not in el: new_el.append(el); continue
+                keep = [(sa_, sb_)]
+                for st_z, cs_z in zones_here:
+                    g = cs_z[side]['g']; nk = []
+                    for lo, hi in keep:
+                        if g['T3'] <= lo or g['T0'] >= hi: nk.append((lo, hi)); continue
+                        if g['T0'] > lo: nk.append((lo, g['T0']))
+                        if g['T3'] < hi: nk.append((g['T3'], hi))
+                    keep = nk
+                if keep == [(sa_, sb_)]: new_el.append(el); continue
+                for n_, (lo, hi) in enumerate(keep):
+                    if hi - lo < 0.02: continue
+                    xs_ = sorted({lo, hi} | {v for v in stas if lo < v < hi}); rr = [ring_interp(el['r'], x_) for x_ in xs_]
+                    if any(r_ is None for r_ in rr): continue
+                    new_el.append({'k': k_ + (f'_{n_}' if n_ else ''), 'm': el['m'], 'xs': [round(v, 3) for v in xs_], 'r': rr})
+            elements[:] = new_el
+        for st, cs_z in zones_here:
             if ('trans', st['sta']) not in done_sites:
-                done_sites.add(('trans', st['sta'])); g0 = tr_ctx['S']['g']
-                tags.append({'sk': 2, 'sta': round((g0['T0'] + g0['T1']) / 2, 2), 'z': round(tr_ctx['S']['cx'], 2), 'y': round(tr_ctx['S']['ba'] + 1.1, 2), 'kind': 'trans', 'text': 'Transisi', 'r': 70})
+                done_sites.add(('trans', st['sta'])); g0 = cs_z['S']['g']
+                tags.append({'sk': 2, 'sta': round((g0['T0'] + g0['T1']) / 2, 2), 'z': round(cs_z['S']['cx'], 2), 'y': round(cs_z['S']['ba'] + 1.1, 2), 'kind': 'trans', 'text': 'Transisi', 'r': 70})
             for s_ in 'US':
-                c_ = tr_ctx[s_]; g = c_['g']; cx, ba, bb = c_['cx'], c_['ba'], c_['bb']; bw_ = 0.8; h_ = 0.95
+                c_ = cs_z[s_]; g = c_['g']; cx, ba, bb = c_['cx'], c_['ba'], c_['bb']; bw_ = 0.8; h_ = 0.95
                 prof_x = [g['S0'], g['S0'] + g['Lr'], g['S1'] - g['Lr'], g['S1']]; prof_y = [ba, st['dip'], st['dip'], bb]
                 def sph(x_): return float(np.interp(x_, prof_x, prof_y))
                 def ring_sip(x_):
@@ -1045,11 +1095,11 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                 hw_out = rect(sc - bw/2 - WALL - 0.4, zb - WALL - 0.3, sc + bw/2 + WALL + 0.4, Fh)
                 zel.append({'m': 'culvert', 'k': 'kepala', 'rings': [flat(hw_out), flat(inner[::-1])], 'z0': z0_, 'z1': z1_})
                 zel.append({'m': 'water', 'k': 'airirigasi', 'rings': [flat(wr)], 'z0': (xh + 0.3) if sg > 0 else -XL, 'z1': XL if sg > 0 else -(xh + 0.3)})
-                slope = (st['ground'] + 0.2 - Fh) / max(xt - xh, 0.5)
-                for sd in (1, -1):                                  # dinding penahan timbunan di kiri-kanan alur terbuka, atasnya mengikuti lereng
-                    xs0 = sc + sd * (bw / 2 + 0.125)
-                    rb = rect(xs0 - 0.125, min(sg * (xh + 0.3), sg * (xt + 0.3)), xs0 + 0.125, max(sg * (xh + 0.3), sg * (xt + 0.3)))
-                    sl.append({'m': 'culvert', 'k': 'penahan', 'rings': [flat(rb)], 'y0': round(Fh, 3), 'gx': round(slope * sg, 4), 'z0': round(sg * (xh + 0.3), 3), 'hb': round(Fh - (zb - 0.3), 3), 'ht': 0.0})
+                Ff, Gt = zz['Ff' + key], zz['Gt' + key]; xf = xh + 0.3; Lx = max(xt - xf, 0.3); slope = (Gt - Ff) / Lx; hwh = bw / 2 + WALL + 0.4
+                for sd in (1, -1):                                  # sayap 30 derajat: tinggi atas mengikuti lereng timbunan, berakhir persis di ujung timbunan
+                    p0 = (sc + sd * hwh, sg * xf); p1 = (p0[0] + sd * Lx * math.tan(math.radians(30)), sg * xt)
+                    rb = ribbon(p0, p1, 0.25)
+                    if rb: sl.append({'m': 'culvert', 'k': 'sayap', 'rings': [flat(ccw(rb))], 'y0': round(Ff, 3), 'gx': round(slope * sg, 4), 'z0': round(sg * xf, 3), 'hb': round(Ff - (zb - 0.3), 3), 'ht': 0.0})
 
         water = None
         if O in FLOOD and all(hullT[t_]['S'] is not None for t_ in T):

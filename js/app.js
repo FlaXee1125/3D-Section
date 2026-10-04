@@ -202,6 +202,49 @@ function preset(name, keepDist) {
   for (const [cam, ctl] of [[camL, ctlL], [camR, ctlR]]) { ctl.target.copy(t); cam.position.set(...pos); ctl.update(); }
 }
 
+// ---------- daftar bangunan pelengkap (lompat langsung)
+function buildStructures() {
+  const list = [];
+  for (const [O, z] of Object.entries(MODEL.zona)) {
+    const typesAt = (sk, sta) => { const g = (z.skenario[sk] || []).find(g => sta >= g.sta[0] - 0.5 && sta <= g.sta[2] + 0.5); return g ? (g.info[1].U.type || '') : ''; };
+    for (const st of z.irigasi.sites) {
+      const t1 = typesAt('1', st.sta).replace(' (standar)', ''), t2 = typesAt('2', st.sta).replace(' (standar)', '');
+      list.push({ O, sta: st.sta, grp: 'Siphon / talang di saluran irigasi', label: `${O} · STA ${fmtSTA(st.sta)} · S1 ${t1 || '–'} / S2 ${t2 || '–'}` });
+    }
+    for (const s of z.irigasi.simpang) {
+      const m = s.match(/^(Simpang \d+) @ ([\d.]+)/); if (!m) continue;
+      list.push({ O, sta: +m[2], grp: 'Simpang', label: `${O} · ${m[1]} · STA ${fmtSTA(+m[2])}` });
+    }
+    const simpangSta = z.irigasi.simpang.map(s => +s.split('@')[1]);
+    const runs = [];
+    for (const g of z.skenario['1'] || []) {
+      if (!(g.info[1].U.type || '').startsWith('Box')) continue;
+      const last = runs[runs.length - 1];
+      if (last && g.sta[0] - last[1] < 0.5) last[1] = g.sta[2]; else runs.push([g.sta[0], g.sta[2]]);
+    }
+    for (const [a, b] of runs) {
+      if (simpangSta.some(p => p >= a - 1 && p <= b + 1)) continue;
+      list.push({ O, sta: (a + b) / 2, grp: 'Box culvert drainase', label: `${O} · STA ${fmtSTA(a)} – ${fmtSTA(b)}` });
+    }
+  }
+  return list.sort((x, y) => x.sta - y.sta);
+}
+function buildGoto() {
+  const sel = $('goto'); const items = buildStructures();
+  for (const grp of ['Simpang', 'Siphon / talang di saluran irigasi', 'Box culvert drainase']) {
+    const og = document.createElement('optgroup'); og.label = grp;
+    items.filter(i => i.grp === grp).forEach(i => { const o = document.createElement('option'); o.value = JSON.stringify([i.O, i.sta]); o.textContent = i.label; og.appendChild(o); });
+    if (og.children.length) sel.appendChild(og);
+  }
+  sel.onchange = () => {
+    if (!sel.value) return;
+    const [O, sta] = JSON.parse(sel.value);
+    if (O !== S.zone) loadZone(O);
+    S.mode = 'sta'; $('cutMode').value = 'sta'; $('offWrap').hidden = $('lvWrap').hidden = true;
+    setSTA(sta, false); preset('iso'); sel.value = '';
+  };
+}
+
 // ---------- UI
 function buildUI() {
   const zs = $('zones'); zs.innerHTML = '';
@@ -376,7 +419,7 @@ function frame(now) {
 
 // ---------- mulai
 fetch('data/model.json').then(r => r.json()).then(m => {
-  MODEL = m; buildUI();
+  MODEL = m; buildUI(); buildGoto();
   const z = location.hash.slice(1); loadZone(MODEL.zona[z] ? z : Object.keys(MODEL.zona)[0]);
   window.__app = { S, camL, ctlL, setSTA, loadZone, preset, views: () => views };
   requestAnimationFrame(frame);

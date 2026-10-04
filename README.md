@@ -20,6 +20,7 @@ Pilih zona (O1…O10) di atas; URL `#O5` membuka zona O5 langsung.
 - Kartu info tiap jendela: tipe saluran, elevasi Top/Dasar/Tanah/As jalan, catatan galian;
   kartu Skenario 2 menampilkan **selisih terhadap Skenario 1** (hijau = naik, merah = turun).
 - Eksagerasi vertikal 1–4×, preset kamera.
+- Menu **Lompat ke bangunan…** (kanan atas) langsung membawa ke Simpang, siphon/talang di saluran irigasi, atau box culvert drainase; zona dan STA berpindah otomatis.
 - Legenda diringkas jadi 7 bagian (Badan Jalan, Timbunan & Tanah, Saluran Drainase, Air, Ruang Bebas Jalan, Sawah, Simpang); tombol **Rincian** menampilkan centang per material.
 - Tabel info di tiap jendela bisa dilipat dengan tombol ▾ (atau tekan **I**); panel bawah dengan ▾ di tengah (atau **H**).
 

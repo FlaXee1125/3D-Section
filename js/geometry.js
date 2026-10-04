@@ -151,7 +151,7 @@ function decodeEarth(e, ts) {            // delta cm -> meter; P (lapisan sawah)
   if (e._d) return e; e._d = true;
   const dec = rows => rows.map(r => { const o = new Array(r.length); let a = 0; for (let i = 0; i < r.length; i++) { a += r[i]; o[i] = a / 100; } return o; });
   e.F = dec(e.F); e.S = dec(e.S); if (e.V) e.V = dec(e.V);
-  e.P = e.S.map((row, k) => row.map((v, i) => { const x = e.x[i]; return (x <= e.toe[k][0] + 1e-6 || x >= e.toe[k][1] - 1e-6) ? v - 0.25 : v; }));
+  e.P = e.S.map((row, k) => row.map((v, i) => { const x = e.x[i]; return (x <= e.toe[k][0] + 1e-6 || x >= e.toe[k][1] - 1e-6) ? v - 0.02 : v; }));
   return e;
 }
 
@@ -162,7 +162,7 @@ export function buildGeometry(segs, sta0, floor, irig) {
     const X = seg.sta.map(v => v - sta0);
     const e = decodeEarth(seg.earth), XE = (e.sta || seg.sta).map(v => v - sta0);
     strip(e.x, e.P, e.S.map(r => r.map(() => floor)), XE, get('ground'));
-    strip(e.x, e.S, e.P, XE, get('sawah'));
+    strip(e.x, e.S, e.P, XE, get('sawah'));            // lapisan sawah setebal 2 cm: permukaan rata dengan tanah, tanpa anak tangga di kaki timbunan
     if (e.V) strip(e.x, e.V, e.F, XE, get('pav'));
     strip(e.x, e.F, e.S, XE, get('fill'));
     if (seg.water) strip(e.x, seg.water.top, e.S, XE, get('water'));

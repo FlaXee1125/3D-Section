@@ -13,6 +13,7 @@ from shapely import affinity
 
 WALL = 0.20  # tebal dinding siphon / talang (m)
 ZC = 12.8    # |offset| tempat saluran irigasi melintang mulai terbuka (di luar badan jalan; di dalamnya lewat gorong-gorong)
+PEMATANG = False   # sawah rata (tanpa pematang)
 TS = 0.25    # tebal lapisan sawah (m)
 CH = 1.0     # tinggi bersih gorong-gorong irigasi (m)
 WFR = 0.6    # tinggi muka air di saluran drainase jalan = 60 % tinggi bersih
@@ -239,7 +240,8 @@ def build_frame(f, floor, override=None):
         # garis bahu s/d tepi perkerasan
         x1, y1, x2, y2 = 12.353, d-0.533, 10.27, d-0.336
         ye = y1 + (10.401-x1)*(y2-y1)/(x2-x1)
-        return [a, (10.401*sign, ye), (10.54*sign, d-1.03), (8.27*sign, d-.916), (.4*sign, d-.68)]
+        sl = (y2 - y1) / (x2 - x1); y54 = y1 + (10.54 - x1) * sl          # garis bahu diteruskan ke tepi bawah badan jalan (10,54): tanpa lekukan antara tepi perkerasan dan lereng
+        return [a, (10.401*sign, ye), (10.54*sign, y54), (8.27*sign, d-.916), (.4*sign, d-.68)]
     left = list(reversed(chains['U'])) if chains['U'] else []   # luar -> tengah
     right = chains['S']                                          # tengah -> luar
     toeL = left[0][0] if left else -12.353
@@ -1024,7 +1026,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
         zel = []
         toeabs = {'U': max(abs(t[0]) for t in toes), 'S': max(abs(t[1]) for t in toes)}
         xbs = {s_: [toeabs[s_] + 0.4 + 9.0 * i for i in range(6) if toeabs[s_] + 0.4 + 9.0 * i < XL - 0.8] for s_ in 'US'}
-        if not trench and not sp_here:
+        if PEMATANG and not trench and not sp_here:
             for s_ in 'US':
                 sign = -1 if s_ == 'U' else 1
                 for n_, xb in enumerate(xbs[s_]):
@@ -1035,7 +1037,7 @@ for O in sorted(byO, key=lambda s: int(s[1:])):
                     elements.append({'k': f'pem{s_}{n_}', 'm': 'pematang', 'r': rg})
         for stn in range(int(math.ceil(sa_ / 25.0)), int(math.floor(sb_ / 25.0)) + 1):
             stv = stn * 25.0
-            if not (sa_ <= stv < sb_) or any(abs(stv - st_['sta']) < ext_ + 1.5 for st_, ext_ in trench) or any(abs(stv - sp['sta']) < SP_REACH for sp in sp_here): continue
+            if not PEMATANG or not (sa_ <= stv < sb_) or any(abs(stv - st_['sta']) < ext_ + 1.5 for st_, ext_ in trench) or any(abs(stv - sp['sta']) < SP_REACH for sp in sp_here): continue
             ti = int(np.argmin([abs(stv - t) for t in T]))
             for s_ in 'US':
                 sign = -1 if s_ == 'U' else 1

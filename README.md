@@ -97,3 +97,5 @@ python3 tools/dxf_to_model.py data/source/3d-Modeling.dxf data/model.json
 - **Label 3D:** nama bagian (Kepala gorong-gorong, Wing, Talang, Siphon, Transisi, Saluran irigasi, Simpang) dengan garis penunjuk berujung titik, tanpa latar; tombol **🏷 Label** mengaktifkan/mematikan.
 - **Tanah:** normal permukaan tanah/timbunan/sawah dihaluskan (rata-rata normal bidang bersinggungan, sudut lipat < 40°).
 - `docs/model-sederhana.html` adalah model 3D sederhana (tanpa DXF) untuk memeriksa bentuk struktur sebelum dimasukkan ke 3D Section.
+- **Tepi jalan:** garis bahu timbunan diteruskan lurus dari tepi perkerasan ke lereng (titik sudut bawah badan jalan tidak lagi ikut membentuk permukaan), sehingga tidak ada lekukan di sepanjang jalan.
+- **Sawah:** permukaan hijau datar tanpa anak tangga di kaki timbunan dan tanpa pematang.

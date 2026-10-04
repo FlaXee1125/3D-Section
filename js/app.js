@@ -15,7 +15,7 @@ const MATS = {
   culvert: { c: 0xf0883e, n: 'Siphon / box culvert / talang' },
   post:    { c: 0xe5484d, n: 'Patok RUMIJA (tiap 20 m)' },
   water:   { c: 0x2f7fd6, n: 'Air (banjir O1 / saluran irigasi)' },
-  sawah:   { c: 0x74b04c, n: 'Sawah' },
+  sawah:   { c: 0x5d9b3f, n: 'Sawah' },
   pematang:{ c: 0xc9ab70, n: 'Pematang sawah' },
   bore:    { c: 0x0b0f14, n: 'Rongga siphon / gorong-gorong' },
   marka:   { c: 0xf4f4f0, n: 'Marka jalan (zebra, stop, chevron, garis)' },
@@ -90,7 +90,7 @@ function buildView(segs) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(geos[m], 3)); if (SMOOTH.has(m)) smoothNormals(g); else g.computeVertexNormals(); g.computeBoundingSphere();
     const col = new THREE.Color(MATS[m].c);
-    const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.88, metalness: 0.03, side: THREE.DoubleSide });
+    const mat = m === 'sawah' ? new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide }) : new THREE.MeshStandardMaterial({ color: col, roughness: 0.88, metalness: 0.03, side: THREE.DoubleSide });
     if (m === 'water') { mat.transparent = true; mat.opacity = 0.5; mat.depthWrite = false; mat.roughness = 0.2; }
     const mesh = new THREE.Mesh(g, mat); mesh.renderOrder = m === 'water' ? 1100 : 1000; mesh.frustumCulled = false; root.add(mesh);
     const rec = { mesh, mat, slots: [] };
@@ -284,7 +284,7 @@ const GROUPS = [
   { n: 'Saluran Drainase', mats: ['channel', 'culvert', 'bore'] },
   { n: 'Air', mats: ['water'] },
   { n: 'Ruang Bebas Jalan (RUMIJA)', mats: ['post'] },
-  { n: 'Sawah', mats: ['sawah', 'pematang'] },
+  { n: 'Sawah', mats: ['sawah'] },
   { n: 'Gorong-gorong Kawasan', mats: ['cross', 'castiron'] },
   { n: 'Simpang', mats: ['marka', 'island', 'cdrain', 'cb', 'bk', 'mh', 'pipa'] },
 ];

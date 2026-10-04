@@ -76,5 +76,5 @@ body.nopanel .panelbtn{bottom:0}
 
 [hidden]{display:none!important}
 
-.tg{position:absolute;transform:translate(-50%,-100%);background:#0b1118e6;border:1px solid var(--line);border-left-width:3px;border-radius:5px;padding:1px 7px;font-size:11px;white-space:nowrap;color:#e8eef4;pointer-events:none}
-.tg.cd{border-left-color:#d8b36a}.tg.irig{border-left-color:#5fc2f0}.tg.talang,.tg.siphon{border-left-color:#f0883e}.tg.simpang{border-left-color:#f2cf2e}
+.tg{position:absolute;white-space:nowrap;font-size:12px;font-weight:500;color:#f2f6fa;padding:0 4px 2px;text-shadow:0 0 3px #000,0 0 6px #000;border-bottom:1.5px solid var(--lc,#e6edf3);pointer-events:none}
+#tagsvg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}

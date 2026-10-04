@@ -50,3 +50,7 @@ data (`data/model.json`). Lihat `README.md`.
 
 ## 11. Gorong-gorong kawasan dan label 3D
 - Gorong-gorong irigasi: kepala masuk ke dalam, talang/siphon di luar kepala; gorong-gorong kawasan (cross drain) 0,5×0,5 m hanya Skenario 1 di 19 STA daftar pengguna (tipikal `TIPIKAL_GORONG_GORONG.dxf`); label nama bangunan 3D.
+
+## 12. Revisi struktur (talang/siphon/gorong-gorong kawasan), label, tanah halus
+- Talang hanya di Skenario 1 yang bertipe Talang; tanpa talang saluran menerus di atas timbunan. Siphon curam 1:1 dekat saluran irigasi, transisi trapesium → kotak 5 m sebelum siphon (2–5 m).
+- Gorong-gorong kawasan di atas tanah, area antar sayap bebas tanah, sayap sampai ujung timbunan, kepala bolong. Label 3D bergaris penunjuk bertitik. Tanah dihaluskan.

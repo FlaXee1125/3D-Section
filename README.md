@@ -82,9 +82,16 @@ python3 tools/dxf_to_model.py data/source/3d-Modeling.dxf data/model.json
 - Air di dalam saluran tidak dimodelkan.
 - Jangkauan offset dimodelkan ±36 m dari as jalan.
 
-## Gorong-gorong kawasan (cross drain) dan label 3D
-- 19 titik (CD-1…CD-19, daftar STA/elevasi dari pengguna), **hanya Skenario 1**, box 0,5×0,5 m (dinding 15 cm) melintang di bawah jalan, bentuk mengacu `data/source/TIPIKAL_GORONG_GORONG.dxf`
-  (kepala di kaki timbunan, sayap 30°, manhole besi cor). Elevasi diperlakukan sebagai acuan dasar dan diturunkan 0,2 m; dasar dijaga ≥ 0,3 m di bawah dasar saluran tepi
-  supaya saluran tidak terpengaruh, dan maks. 1,2 m di bawah tanah. CD di luar cakupan DXF (STA 17883,9) dan di celah STA tanpa gambar tidak digambar.
-- Gorong-gorong irigasi: kepala ditarik ke dalam (dekat jalan) dengan dinding penahan, talang/siphon berada di luar kepala di atas saluran terbuka.
-- Tombol **🏷 Label** menampilkan nama bangunan (cross drain, gorong-gorong irigasi, talang/siphon, simpang) sebagai label 3D di tiap jendela.
+## Struktur silang saluran irigasi, siphon, gorong-gorong kawasan, label
+- **Gorong-gorong irigasi + talang (Skenario 1):** talang hanya di lokasi yang gambarnya bertipe Talang (O6 9+942,90; O9 14+714,76 s.d. 14+729,00). Di sana kepala gorong-gorong ditarik ke dalam,
+  talang berada di luar kepala di atas saluran irigasi terbuka. Di lokasi tanpa talang (O5 8+339,85; O7 11+625,23; O8 14+055,87) saluran drainase menerus di atas timbunan,
+  kepala gorong-gorong di luar saluran, dengan sayap/dinding penahan sejajar lereng 1:2 sampai ujung timbunan.
+- **Siphon (Skenario 2):** ramp curam 1:1 tepat di sekitar saluran irigasi (turun sebelum saluran, mendatar di bawah dasar, naik setelahnya). Transisi trapesium → kotak dimulai 5 m sebelum siphon,
+  panjang 2–5 m menurut lebar saluran tetangga; sisanya saluran kotak terbuka. Lebar saluran irigasi menyesuaikan panjang rentang siphon (rentang pendek di DXF membuatnya sempit, 1,2–1,5 m).
+  Siphon di bawah mulut simpang (O5) tetap panjang, dengan transisi di kedua ujung rentang.
+- **Gorong-gorong kawasan (CD-1…CD-18, Skenario 1):** box 0,5×0,5 m (dinding 15 cm) di atas tanah dasar tanpa galian, dasarnya = tanah tertinggi di kedua kaki timbunan
+  (dijaga ≥ 0,3 m di bawah dasar saluran tepi). Kepala bolong dengan sayap 30° yang tinggi atasnya mengikuti lereng dan berakhir persis di ujung timbunan; area antar sayap bebas tanah.
+  Elevasi di daftar user tidak dipakai untuk dasar box (rata-rata hanya ±0,4 m dari tanah dasar; CD-9 dan CD-10 lebih rendah sampai 1 m). CD di luar DXF (17+883,9) tidak digambar.
+- **Label 3D:** nama bagian (Kepala gorong-gorong, Wing, Talang, Siphon, Transisi, Saluran irigasi, Simpang) dengan garis penunjuk berujung titik, tanpa latar; tombol **🏷 Label** mengaktifkan/mematikan.
+- **Tanah:** normal permukaan tanah/timbunan/sawah dihaluskan (rata-rata normal bidang bersinggungan, sudut lipat < 40°).
+- `docs/model-sederhana.html` adalah model 3D sederhana (tanpa DXF) untuk memeriksa bentuk struktur sebelum dimasukkan ke 3D Section.

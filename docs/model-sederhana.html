@@ -53,7 +53,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/OrbitControls.js';
 
 // ---------- parameter (semua asumsi ada di sini)
-const P = { Hc: 2.5, a: 10.5, yb: 2.0, bermW: 3.0, xc: 13.0, bw: 4.0, bed: -0.5, X: 24, Z: 22, cell: 0.25,
+const P = { Hc: 2.5, a: 10.5, yb: 2.0, bermW: 3.0, xc: 13.0, bw: 4.0, bed: -0.5, X: 22, Z: 18, cell: 0.125,
   tw: 0.25, bIn: 1.0, hIn: 0.8, bt: 0.25, wallT: 0.2 };
 P.xb0 = P.a + 2 * (P.Hc - P.yb); P.xb1 = P.xb0 + P.bermW; P.xt = P.xb1 + 2 * P.yb;
 const hAt = x => { x = Math.abs(x); if (x <= P.a) return P.Hc; if (x <= P.xb0) return P.Hc - (x - P.a) / 2; if (x <= P.xb1) return P.yb; if (x <= P.xt) return P.yb - (x - P.xb1) / 2; return 0; };
@@ -241,9 +241,9 @@ const SCENES = {
       dims: [['Kepala dari as jalan', '11,0'], ['Talang (luar)', '1,0 × 1,0'], ['Bentang talang (antar tumpuan)', '4,4'], ['Lebar saluran irigasi', '4,0'], ['Dasar talang = dasar saluran drainase', '1,0 di atas tanah dasar']] }) },
   siphon: { tab: 'Siphon (Skenario 2)', build() {
     const xh = 11.0, hf = P.bw / 2 + P.wallT, low = P.bed - 0.3 - 1.0, drop = (P.yb - 1.0) - low, ramp = SLOPES[ST.slope].k * drop, rs = hf + ramp, sel = TRAPS[ST.trap];
-    const R = sel.box ? BOX : RING.trap(sel.b, sel.H, sel.zs), L = sel.box ? 0 : trLen(R), zT = rs + 10;
+    const R = sel.box ? BOX : RING.trap(sel.b, sel.H, sel.zs), L = sel.box ? 0 : Math.min(trLen(R), 5), zT = rs + 5;
     if (sel.box) { chanSeg(-P.Z, -rs, BOX, BOX, MATS.ditch); chanSeg(rs, P.Z, BOX, BOX, MATS.ditch); }
-    else {                                                              // trapesium | transisi (mulai 10 m sebelum siphon) | kotak terbuka | siphon
+    else {                                                              // trapesium | transisi (mulai 5 m sebelum siphon) | kotak terbuka | siphon
       chanSeg(-P.Z, -zT, R, R, MATS.ditch); chanSeg(-zT, -zT + L, R, BOX, MATS.trans); chanSeg(-zT + L, -rs, BOX, BOX, MATS.ditch);
       chanSeg(rs, zT - L, BOX, BOX, MATS.ditch); chanSeg(zT - L, zT, BOX, R, MATS.trans); chanSeg(zT, P.Z, R, R, MATS.ditch);
     }
@@ -251,12 +251,12 @@ const SCENES = {
     const path = [[-rs, P.yb - 1.0], [-hf, low], [hf, low], [rs, P.yb - 1.0]];
     bothSides(s => sweepBox(s * P.xc, 1.0, 1.0, path, MATS.siphon));
     if (!sel.box) label('Saluran trapesium', P.xc, 2.6, -zT - 3, 'ditch'), label('Transisi', P.xc, 2.5, -zT + L / 2, 'trans');
-    label('Saluran kotak', P.xc, 2.4, -(rs + (sel.box ? 4 : (10 - L) / 2)), 'ditch'); label('Siphon', P.xc, -1.0, 0, 'siphon'); label('Saluran irigasi', 20.5, 0.2, 0); label('Kepala gorong-gorong', xh, 2.7, -2.5, 'conc'); },
-    info: () => { const sel = TRAPS[ST.trap], R = sel.box ? null : RING.trap(sel.b, sel.H, sel.zs), L = sel.box ? 0 : trLen(R);
+    label('Saluran kotak', P.xc, 2.4, -(rs + (sel.box ? 3 : (5 - L) / 2)), 'ditch'); label('Siphon', P.xc, -1.0, 0, 'siphon'); label('Saluran irigasi', 20.5, 0.2, 0); label('Kepala gorong-gorong', xh, 2.7, -2.5, 'conc'); },
+    info: () => { const sel = TRAPS[ST.trap], R = sel.box ? null : RING.trap(sel.b, sel.H, sel.zs), L = sel.box ? 0 : Math.min(trLen(R), 5);
       return { title: 'Skenario 2 · siphon di bawah saluran irigasi', sub: 'Berlaku di O5 (8+339,85), O6 (9+942,90), O7 (11+625,23), O8 (14+064,93), O9 (14+714,76).', ctl: 'chSel',
       order: sel.box ? ['Saluran kotak tertanam di berm', 'Box siphon <b>turun</b> sebelum saluran irigasi', 'Mendatar di bawah dasar saluran irigasi', 'Box <b>naik</b> setelah saluran irigasi', 'Saluran kotak kembali'] :
-        ['Saluran trapesium (tertanam di timbunan)', `<b>Transisi ${L.toFixed(1).replace('.', ',')} m</b> trapesium → kotak, dimulai 10 m sebelum siphon`, `Saluran kotak terbuka ${(10 - L).toFixed(1).replace('.', ',')} m`, 'Box siphon <b>turun curam</b> tepat sebelum saluran irigasi', 'Mendatar di bawah dasar saluran irigasi (atap box 0,3 di bawahnya)', 'Naik setelah saluran irigasi, lalu urutan sama dibalik'],
-      dims: [['Box siphon / saluran kotak (luar)', '1,0 × 1,0'], ['Dinding box', '0,25'], ['Kemiringan turun / naik (curam)', SLOPES[ST.slope].n], ['Panjang ramp (dari tepi saluran irigasi)', (SLOPES[ST.slope].k * 2.8).toFixed(1).replace('.', ',')], ['Atap box di bawah dasar saluran', '0,3'], ...(sel.box ? [] : [['Lebar atas trapesium (dalam)', R.top.toFixed(2).replace('.', ',')], ['Panjang transisi (2,5 × (lebar atas − 1,0), 2–5)', L.toFixed(2).replace('.', ',')], ['Awal transisi sebelum siphon', '10,0']])] }; } },
+        ['Saluran trapesium (tertanam di timbunan)', `<b>Transisi ${L.toFixed(1).replace('.', ',')} m</b> trapesium → kotak, dimulai 5 m sebelum siphon`, `Saluran kotak terbuka ${(5 - L).toFixed(1).replace('.', ',')} m`, 'Box siphon <b>turun curam</b> tepat sebelum saluran irigasi', 'Mendatar di bawah dasar saluran irigasi (atap box 0,3 di bawahnya)', 'Naik setelah saluran irigasi, lalu urutan sama dibalik'],
+      dims: [['Box siphon / saluran kotak (luar)', '1,0 × 1,0'], ['Dinding box', '0,25'], ['Kemiringan turun / naik (curam)', SLOPES[ST.slope].n], ['Panjang ramp (dari tepi saluran irigasi)', (SLOPES[ST.slope].k * 2.8).toFixed(1).replace('.', ',')], ['Atap box di bawah dasar saluran', '0,3'], ...(sel.box ? [] : [['Lebar atas trapesium (dalam)', R.top.toFixed(2).replace('.', ',')], ['Panjang transisi (2,5 × (lebar atas − 1,0), 2–5)', L.toFixed(2).replace('.', ',')], ['Awal transisi sebelum siphon', '5,0']])] }; } },
   cross: { tab: 'Gorong-gorong kawasan (cross drain)', build() {
     const inner = 0.5, wt = 0.15, ho = inner / 2 + wt, yb0 = 0, yIn = wt, yTop = yIn + inner + wt, xhead = 16.75, tan30 = Math.tan(Math.PI / 6), hw0 = 0.9;
     chanSeg(-P.Z, P.Z, BOX, BOX, MATS.ditch);

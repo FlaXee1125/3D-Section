@@ -55,6 +55,25 @@ const S = { zone: null, mode: 'sta', s: 0, win: 150, off: 0, lv: 0, ve: 1, flip:
 let MODEL, Z, views = [null, null], sta0 = 0, planes = [], lastDeck = 50;
 ORDER.forEach(k => S.vis[k] = true);
 
+// ---------- normal halus untuk tanah: rata-rata normal bidang yang bersinggungan (sudut lipat < crease), agar permukaan tidak tampak kotak-kotak
+function smoothNormals(g, crease = 40) {
+  const p = g.attributes.position.array, nt = p.length / 9, fn = new Float32Array(nt * 3), cs = Math.cos(crease * Math.PI / 180);
+  for (let t = 0; t < nt; t++) {
+    const o = t * 9, ax = p[o + 3] - p[o], ay = p[o + 4] - p[o + 1], az = p[o + 5] - p[o + 2], bx = p[o + 6] - p[o], by = p[o + 7] - p[o + 1], bz = p[o + 8] - p[o + 2];
+    let x = ay * bz - az * by, y = az * bx - ax * bz, z = ax * by - ay * bx; const l = Math.hypot(x, y, z) || 1; fn[t * 3] = x / l; fn[t * 3 + 1] = y / l; fn[t * 3 + 2] = z / l;
+  }
+  const key = o => (Math.round(p[o] * 100) + 400000) * 1.7e9 + (Math.round(p[o + 1] * 100) + 20000) * 65536 + (Math.round(p[o + 2] * 100) + 20000), map = new Map();
+  for (let v = 0; v < nt * 3; v++) { const k = key(v * 3); let a = map.get(k); if (!a) map.set(k, a = []); a.push(Math.floor(v / 3)); }
+  const nor = new Float32Array(p.length);
+  for (let v = 0; v < nt * 3; v++) {
+    const t0 = Math.floor(v / 3), a = map.get(key(v * 3)); let x = 0, y = 0, z = 0;
+    for (const t of a) { const d = fn[t * 3] * fn[t0 * 3] + fn[t * 3 + 1] * fn[t0 * 3 + 1] + fn[t * 3 + 2] * fn[t0 * 3 + 2]; if (d >= cs) { x += fn[t * 3]; y += fn[t * 3 + 1]; z += fn[t * 3 + 2]; } }
+    const l = Math.hypot(x, y, z) || 1; nor[v * 3] = x / l; nor[v * 3 + 1] = y / l; nor[v * 3 + 2] = z / l;
+  }
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+}
+const SMOOTH = new Set(['ground', 'fill', 'sawah']);
+
 // ---------- membangun scene satu skenario
 function buildView(segs) {
   const scene = new THREE.Scene();
@@ -69,7 +88,7 @@ function buildView(segs) {
   ORDER.forEach((m, mi) => {
     if (!geos[m] || !geos[m].length) return;
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(geos[m], 3)); g.computeVertexNormals(); g.computeBoundingSphere();
+    g.setAttribute('position', new THREE.BufferAttribute(geos[m], 3)); if (SMOOTH.has(m)) smoothNormals(g); else g.computeVertexNormals(); g.computeBoundingSphere();
     const col = new THREE.Color(MATS[m].c);
     const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.88, metalness: 0.03, side: THREE.DoubleSide });
     if (m === 'water') { mat.transparent = true; mat.opacity = 0.5; mat.depthWrite = false; mat.roughness = 0.2; }
@@ -400,29 +419,42 @@ function updateLabels(w, h) {
   });
 }
 
-// ---------- label nama bangunan (3D)
+// ---------- label nama bangunan (3D): teks bergaris bawah, garis penunjuk berujung titik bulat, tanpa latar
 let tagEls = [];
 S.tags = true;
+const KC = { cd: '#d8b36a', irig: '#5fc2f0', conc: '#d7dbe0', talang: '#f0883e', siphon: '#e0533d', trans: '#d9c24a', simpang: '#f2cf2e', canal: '#4aa3d6' };
+const SVGNS = 'http://www.w3.org/2000/svg', OFFS = [[44, -44], [-44, -62], [54, -88], [-54, -30], [38, -20], [-38, -92], [66, -60], [-66, -50]];
 function buildTags() {
-  tagEls.forEach(t => t.el.remove()); tagEls = [];
+  const svg = $('tagsvg'); svg.innerHTML = ''; tagEls.forEach(t => t.el.remove()); tagEls = [];
+  let n = 0;
   for (const tg of (Z.tags || [])) for (const vp of [0, 1]) {
     if (tg.sk !== 0 && tg.sk !== vp + 1) continue;
-    const el = document.createElement('div'); el.className = 'tg ' + tg.kind; el.textContent = tg.text; $('labels').appendChild(el);
-    tagEls.push({ el, tg, vp });
+    const c = KC[tg.kind] || '#e6edf3', el = document.createElement('div'); el.className = 'tg'; el.textContent = tg.text; el.style.setProperty('--lc', c); $('labels').appendChild(el);
+    const ln = document.createElementNS(SVGNS, 'line'), dt = document.createElementNS(SVGNS, 'circle');
+    ln.setAttribute('stroke', c); ln.setAttribute('stroke-width', '1.5'); dt.setAttribute('r', '4'); dt.setAttribute('fill', c); dt.setAttribute('stroke', '#0b1118'); dt.setAttribute('stroke-width', '1.2'); svg.append(ln, dt);
+    const o = OFFS[n++ % OFFS.length]; tagEls.push({ el, ln, dt, tg, vp, dx: o[0], dy: o[1], w: 0, h: 0 });
   }
 }
 const tpos = new THREE.Vector3();
 function updateTags(w, h) {
-  for (const { el, tg, vp } of tagEls) {
-    if (!S.tags) { el.style.display = 'none'; continue; }
-    const cam = vp ? camR : camL;
-    tpos.set(tg.sta - sta0, tg.y * S.ve, tg.z);
-    const dist = cam.position.distanceTo(tpos);
-    tpos.project(cam);
-    const vis = tpos.z < 1 && Math.abs(tpos.x) < 1.0 && Math.abs(tpos.y) < 1.0 && dist < 190;
-    el.style.display = vis ? '' : 'none'; if (!vis) continue;
-    el.style.left = ((tpos.x * 0.5 + 0.5) * (w / 2) + vp * w / 2) + 'px'; el.style.top = ((-tpos.y * 0.5 + 0.5) * h) + 'px';
-    el.style.opacity = Math.max(0.35, Math.min(1, 1.2 - dist / 190));
+  const items = [[], []];
+  for (const t of tagEls) {
+    const cam = t.vp ? camR : camL, vis0 = S.tags;
+    tpos.set(t.tg.sta - sta0, t.tg.y * S.ve, t.tg.z);
+    const dist = cam.position.distanceTo(tpos); tpos.project(cam);
+    const vis = vis0 && tpos.z < 1 && Math.abs(tpos.x) < 1.0 && Math.abs(tpos.y) < 1.0 && dist < (t.tg.r || 190);
+    t.el.style.display = t.ln.style.display = t.dt.style.display = vis ? '' : 'none'; if (!vis) continue;
+    if (!t.w) { t.w = t.el.offsetWidth; t.h = t.el.offsetHeight; }
+    const ax = (tpos.x * 0.5 + 0.5) * (w / 2) + t.vp * w / 2, ay = (-tpos.y * 0.5 + 0.5) * h;
+    items[t.vp].push({ t, ax, ay, ex: ax + t.dx, ey: ay + t.dy });
+  }
+  for (const list of items) {
+    list.sort((p, q) => p.ey - q.ey);                              // hindari tumpang tindih: geser ke atas
+    const rc = it => { const x0 = it.t.dx > 0 ? it.ex : it.ex - it.t.w; return [x0, it.ey - it.t.h, x0 + it.t.w, it.ey]; };
+    for (let k = 0; k < list.length; k++) for (let j = 0; j < k; j++) { const A = rc(list[j]), B = rc(list[k]); if (A[0] < B[2] && B[0] < A[2] && A[1] < B[3] && B[1] < A[3]) list[k].ey = A[1] - 3; }
+    for (const it of list) { const t = it.t, x0 = t.dx > 0 ? it.ex : it.ex - t.w;
+      t.el.style.left = x0 + 'px'; t.el.style.top = (it.ey - t.h) + 'px';
+      t.ln.setAttribute('x1', it.ax); t.ln.setAttribute('y1', it.ay); t.ln.setAttribute('x2', it.ex); t.ln.setAttribute('y2', it.ey); t.dt.setAttribute('cx', it.ax); t.dt.setAttribute('cy', it.ay); }
   }
 }
 $('btnTags').onclick = e => { S.tags = !S.tags; e.target.classList.toggle('on', S.tags); };
